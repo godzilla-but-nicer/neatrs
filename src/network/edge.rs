@@ -1,20 +1,17 @@
-use crate::network::node::Node;
 
-
-pub struct Edge<'a> {
-    pub in_node: &'a Node<'a>,
-    pub out_node: &'a Node<'a>,
+#[derive(PartialEq)]
+pub struct Edge {
+    pub source_i: usize,
+    pub target_i: usize,
     pub weight: f64,
 }
 
-impl<'a> Edge<'a> {
-    fn new<'b>(in_node: &'b Node, out_node: &'b Node, weight: f64) -> Edge<'b> {
+impl Edge {
+    pub fn new(source_i: usize, target_i: usize, weight: f64) -> Edge {
         Edge {
-            in_node,
-            out_node,
+            source_i,
+            target_i,
             weight
         }
     }
-
-    
 }

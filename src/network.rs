@@ -1,3 +1,3 @@
-mod edge;
-mod node;
+pub mod edge;
+pub mod node;
 mod neural_network;

@@ -1,4 +1,5 @@
 mod network;
+mod genome;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

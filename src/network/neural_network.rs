@@ -1,5 +1,6 @@
 use crate::network::node::{Node, NodeKind};
 use crate::network::edge::Edge;
+use crate::genome::genome::Genome;
 
 struct NeuralNetwork {
     nodes: Vec<Node>,
@@ -62,7 +63,10 @@ impl NeuralNetwork {
 
     // calculate net input and activate a node
     fn activate_node(&mut self, node_i: usize) {
-        let mut net_input = 0.0;
+
+        // init input with bias instead of adding later
+        let mut net_input = self.nodes[node_i].bias;
+
         for edge_i in &self.nodes[node_i].in_edges {
             
             // locate the focal input
@@ -109,7 +113,34 @@ impl NeuralNetwork {
         }
     }
 
+    // construct network from genome. primary constructor
+    fn from_genome(genome: &Genome) -> NeuralNetwork {
+
+        // make owned copies of objects
+        let mut nodes = genome.node_genes.clone();
+        let mut edges = genome.edge_genes.clone();
+
+        // populate in edge indices for each node
+        for node_i in 0..nodes.len() {
+            for edge_i in 0..nodes.len() {
+                if node_i == edges[edge_i].target_i {
+                    nodes[node_i].in_edges.push(edge_i);
+                }
+            }
+        }
+
+        NeuralNetwork {
+            nodes,
+            edges,
+            sensor_idx: genome.sensor_idx.clone(),
+            output_idx: genome.output_idx.clone(),
+            max_depth: 20,
+        }
+
+    }
+
     // creates a dense network with the given number of inputs and outputs
+    // used for tests
     fn new_minimal(sensors: usize, outputs: usize) -> NeuralNetwork {
 
         // first we add edges
@@ -117,7 +148,7 @@ impl NeuralNetwork {
         
         for si in 0..sensors {
             for oi in 0..outputs {
-                edge_vec.push(Edge::new(si, sensors + oi, 0.0));
+                edge_vec.push(Edge::new(0, si, sensors + oi, 0.0));
             }
         }
         
@@ -135,8 +166,8 @@ impl NeuralNetwork {
 
             // create the node
             let new_node = Node::from_edges(NodeKind::Sensor, 
-                                            vec![], 
-                                            outward_edges);
+                                            vec![]);
+
             node_vec.push(new_node);
         }
 
@@ -149,8 +180,7 @@ impl NeuralNetwork {
                 inward_edges.push(si * outputs + oi);
             }
             let new_node = Node::from_edges(NodeKind::Output, 
-                                            inward_edges, 
-                                            vec![]);
+                                            inward_edges);
             node_vec.push(new_node);
         }
 

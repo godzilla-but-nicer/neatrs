@@ -118,11 +118,11 @@ impl NeuralNetwork {
 
         // make owned copies of objects
         let mut nodes = genome.node_genes.clone();
-        let mut edges = genome.edge_genes.clone();
+        let edges = genome.edge_genes.clone();
 
         // populate in edge indices for each node
         for node_i in 0..nodes.len() {
-            for edge_i in 0..nodes.len() {
+            for edge_i in 0..edges.len() {
                 if node_i == edges[edge_i].target_i {
                     nodes[node_i].in_edges.push(edge_i);
                 }
@@ -138,71 +138,19 @@ impl NeuralNetwork {
         }
 
     }
-
-    // creates a dense network with the given number of inputs and outputs
-    // used for tests
-    fn new_minimal(sensors: usize, outputs: usize) -> NeuralNetwork {
-
-        // first we add edges
-        let mut edge_vec: Vec<Edge> = Vec::with_capacity(sensors * outputs);
-        
-        for si in 0..sensors {
-            for oi in 0..outputs {
-                edge_vec.push(Edge::new(0, si, sensors + oi, 0.0));
-            }
-        }
-        
-        // now we need to add all of the nodes
-        let mut node_vec: Vec<Node> = Vec::with_capacity(sensors + outputs);
-
-        // iterate ver the sensors to add them
-        for si in 0..sensors {
-
-            // iterate over outputs to specify edges
-            let mut outward_edges: Vec<usize> = Vec::with_capacity(outputs);
-            for oi in 0..outputs {
-                outward_edges.push(si * outputs + oi);
-            }
-
-            // create the node
-            let new_node = Node::from_edges(NodeKind::Sensor, 
-                                            vec![]);
-
-            node_vec.push(new_node);
-        }
-
-        // iterate over outputs to add the outputs
-        for oi in 0..outputs {
-            
-            // iterate over sensors to specify edges
-            let mut inward_edges: Vec<usize> = Vec::with_capacity(sensors);
-            for si in 0..sensors {
-                inward_edges.push(si * outputs + oi);
-            }
-            let new_node = Node::from_edges(NodeKind::Output, 
-                                            inward_edges);
-            node_vec.push(new_node);
-        }
-
-        // build and return
-        NeuralNetwork {
-            nodes: node_vec,
-            edges: edge_vec,
-            sensor_idx: (0..sensors).collect(),
-            output_idx: (sensors..(sensors + outputs)).collect(),
-            max_depth: 20,
-        }
-    }
 }
 
 #[cfg(test)]
 mod test_neural_network {
     use super::*;
+    use crate::genome::genome::Genome;
 
     #[test]
-    fn test_new_minimal() {
-        let nn = NeuralNetwork::new_minimal(3, 4);
-        
+    fn test_from_genome() {
+        // init the network from a genome
+        let gen = Genome::new_minimal_dense(3, 4);
+        let nn = NeuralNetwork::from_genome(&gen); 
+
         // debug
         for edge_i in 0..nn.edges.len() {
             println!("idx: {}, source: {}, weight: {}, target: {}", edge_i, 
@@ -212,18 +160,20 @@ mod test_neural_network {
         }
 
         for node_i in 0..nn.nodes.len() {
-            println!("idx: {}, output: {}, kind: {:?}", node_i, 
+            println!("idx: {}, output: {}, kind: {:?}, in_edges: {:?}", node_i, 
                                                         nn.nodes[node_i].output,
-                                                        nn.nodes[node_i].kind)
+                                                        nn.nodes[node_i].kind,
+                                                        nn.nodes[node_i].in_edges)
         }
 
         assert!(nn.edges[5].source_i == 1);
-        assert!(nn.nodes[6].in_edges[0] == 3)
+        assert!(nn.nodes[6].in_edges[2] == 11)
     }
 
     #[test]
     fn test_node_ready() {
-        let mut nn = NeuralNetwork::new_minimal(3, 2);
+        let gen = Genome::new_minimal_dense(3, 2);
+        let mut nn = NeuralNetwork::from_genome(&gen);
         nn.nodes[0].active = true;
         nn.nodes[1].active = true;
         nn.nodes[2].active = true;
@@ -232,12 +182,16 @@ mod test_neural_network {
 
     #[test]
     fn test_propagate() {
-        let mut nn = NeuralNetwork::new_minimal(3, 2);
+        let gen = Genome::new_minimal_dense(3, 2);
+        let mut nn = NeuralNetwork::from_genome(&gen);
 
         // set weights to something easy
         for i in 0..nn.edges.len() {
             nn.edges[i].weight = i as f64;
         }
+
+        nn.nodes[3].bias = 2.0;
+        nn.nodes[4].bias = 1.0;
         
         // same for the sensors
         nn.load_sensors(vec![-1., 0., 1.]);
@@ -252,11 +206,26 @@ mod test_neural_network {
             println!("idx: {}, output: {}, kind: {:?}", node_i, nn.nodes[node_i].output, nn.nodes[node_i].kind)
         }
 
+        // components of net input going into output
+        let mut net_comps_3 = Vec::new();
+        for in_edge_i in &nn.nodes[3].in_edges {
+            let source_i = nn.edges[*in_edge_i].source_i;
+            net_comps_3.push(nn.nodes[source_i].output * nn.edges[*in_edge_i].weight)
+        }
+        net_comps_3.push(nn.nodes[3].bias);
+
+        let mut net_comps_4 = Vec::new();
+        for in_edge_i in &nn.nodes[4].in_edges {
+            let source_i = nn.edges[*in_edge_i].source_i;
+            net_comps_4.push(nn.nodes[source_i].output * nn.edges[*in_edge_i].weight)
+        }
+        net_comps_4.push(nn.nodes[4].bias);
+        println!("Node 3 inputs: {:?}", net_comps_3);
+        println!("Node 4 inputs: {:?}", net_comps_4);
 
         let outputs = nn.get_outputs();
-        println!("{}, {}", outputs[0], outputs[1]);
 
-        assert!((outputs[0] - 4.).abs() < 1e-8);
-        assert!((outputs[1] - 4.).abs() < 1e-8)
+        assert!((outputs[0] - 0.997527).abs() < 1e-3);
+        assert!((outputs[1] - 0.993307).abs() < 1e-3)
     }
 }

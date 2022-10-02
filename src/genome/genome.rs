@@ -13,7 +13,7 @@ pub struct Genome {
 
 impl Genome {
     // genome that translates to a dense two-layer network
-    fn new_minimal_dense(&self, sensors: usize, outputs: usize) -> Genome {
+    pub fn new_minimal_dense(sensors: usize, outputs: usize) -> Genome {
 
         // rng for gene initialization
         let mut rng = rand::thread_rng();

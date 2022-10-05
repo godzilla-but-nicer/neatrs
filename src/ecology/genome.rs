@@ -14,7 +14,7 @@ pub struct Genome {
 
 impl Genome {
 
-    pub fn compatibility(&self, partner: &Genome, c1: f64, c2: f64, c3: f64, max_innovation: usize) -> f64 {
+    pub fn incompatibility(&self, partner: &Genome, c1: f64, c2: f64, c3: f64, max_innovation: usize) -> f64 {
         
         // align to count disjoint and excess genes
         let (aln_self, aln_partner) = self.align(partner, max_innovation);
@@ -183,7 +183,7 @@ mod test_genome {
     use super::*;
 
     #[test]
-    fn test_compatibile() {
+    fn test_incompatibility() {
         let mut gen_1 = Genome::new_minimal_dense(2, 3);
         let mut gen_2 = Genome::new_minimal_dense(3, 4);
 
@@ -199,7 +199,7 @@ mod test_genome {
 
         let known = disjoint / N + excess / N;
 
-        assert!((gen_1.compatibility(&gen_2, 1., 1., 1., 20) - known).abs() < max_avg_weight_diff)
+        assert!((gen_1.incompatibility(&gen_2, 1., 1., 1., 20) - known).abs() < max_avg_weight_diff)
     }
 
     #[test]

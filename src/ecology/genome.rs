@@ -14,9 +14,46 @@ pub struct Genome {
 
 impl Genome {
 
-    pub fn compatible(&self, partner: &Genome) -> bool {
-        // we need a vector of unique innovation numbers contained by the genome
-        true
+    pub fn compatibility(&self, partner: &Genome, c1: f64, c2: f64, c3: f64, max_innovation: usize) -> f64 {
+        
+        // align to count disjoint and excess genes
+        let (aln_self, aln_partner) = self.align(partner, max_innovation);
+        
+        // get excess first
+        let self_end = aln_self.iter().rposition(|x| *x != -1_i32).unwrap();
+        let part_end = aln_self.iter().rposition(|x| *x != -1_i32).unwrap();
+        let both_ends = vec![self_end, part_end];
+        let excess = both_ends.iter().max().unwrap();
+
+        // double counting some genes, corrected below
+        let mut disjoint = 0;
+
+        // we'll also count average weight difference here
+        let mut diffs = 0.0;
+
+        for i_num in 0..aln_self.len() {
+            
+            // note whether disjoint
+            if aln_self[i_num] == -1 || aln_partner[i_num] == -1 {
+                disjoint += 1
+
+            // if not get the difference
+            } else {
+                let self_gi = self.edge_genes.iter().position(|gene| gene.innovation == i_num).unwrap();
+                let part_gi = partner.edge_genes.iter().position(|gene| gene.innovation == i_num).unwrap();
+
+                let self_weight = self.edge_genes[self_gi].weight;
+                let part_weight = partner.edge_genes[part_gi].weight;
+
+                diffs += (self_weight - part_weight).abs();
+            }
+        }
+        // normalize
+        let excess_norm = *excess as f64 / aln_self.len() as f64;
+        let disjoint_norm = (disjoint - *excess) as f64 / aln_self.len() as f64;
+        let avg_diff = diffs / aln_self.len() as f64;
+
+        c1 * disjoint_norm + c2 * excess_norm * c3 * avg_diff
     }
 
     // produces vectors of innovation numbers in increasing order
@@ -144,6 +181,26 @@ impl Genome {
 #[cfg(test)]
 mod test_genome {
     use super::*;
+
+    #[test]
+    fn test_compatibile() {
+        let mut gen_1 = Genome::new_minimal_dense(2, 3);
+        let mut gen_2 = Genome::new_minimal_dense(3, 4);
+
+        gen_2._remove_by_innovation(4);
+        gen_2._remove_by_innovation(5);
+
+        // knowns
+        let disjoint = 2.;
+        let excess = 6.;
+        let N = 12.;
+
+        let max_avg_weight_diff = 2.;
+
+        let known = disjoint / N + excess / N;
+
+        assert!((gen_1.compatibility(&gen_2, 1., 1., 1., 20) - known).abs() < max_avg_weight_diff)
+    }
 
     #[test]
     fn test_align() {

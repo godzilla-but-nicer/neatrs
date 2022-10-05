@@ -1,6 +1,6 @@
 use crate::network::node::{Node, NodeKind};
 use crate::network::edge::Edge;
-use crate::genome::genome::Genome;
+use crate::ecology::genome::Genome;
 
 struct NeuralNetwork {
     nodes: Vec<Node>,
@@ -143,7 +143,7 @@ impl NeuralNetwork {
 #[cfg(test)]
 mod test_neural_network {
     use super::*;
-    use crate::genome::genome::Genome;
+    use crate::ecology::genome::Genome;
 
     #[test]
     fn test_from_genome() {

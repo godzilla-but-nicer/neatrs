@@ -13,10 +13,10 @@ pub enum NodeKind {
 pub struct Node {
     pub active: bool,                // whether the node has been activated
     pub in_edges: Vec<usize>,        // incoming edges
-    pub out_edges: Vec<usize>,       // outgoing edges
     pub output: f64,                 // signal to send to downstream nodes
     pub activation: fn(f64) -> f64,  // net_input -> output
     pub kind: NodeKind,              // what kind of node it is
+    pub bias: f64,
 }
 
 impl Node {
@@ -24,44 +24,41 @@ impl Node {
     // edge operations
     // delete an edge from either in or out_edges
     pub fn remove_edge(&mut self, edge: usize, outward: bool) {
-        if outward {
-            self.out_edges.retain(|x| x != &edge);
-        } else {
-            self.in_edges.retain(|x| x != &edge);
-        }
+        self.in_edges.retain(|x| x != &edge);
     }
 
     // inverse of above
     pub fn add_edge(&mut self, edge: usize, outward: bool) {
-        if outward {
-            self.out_edges.push(edge);
-        } else {
-            self.in_edges.push(edge);
-        }
-
+        self.in_edges.push(edge);
     }
 
     // default constructor. edge logic handled in network
-    pub fn new(kind: NodeKind) -> Node {
+    pub fn new(kind: NodeKind, bias: f64) -> Node {
 
         // assign activation based on node kind
         let activation = match kind {
             NodeKind::Sensor => |x| x,
             NodeKind::Hidden => Node::sigmoid,
-            NodeKind::Output => |x| x,
+            NodeKind::Output => Node::sigmoid,
+        };
+
+        let bias = match kind {
+            NodeKind::Sensor => 0.0,
+            NodeKind::Hidden => bias,
+            NodeKind::Output => bias,
         };
 
         Node {
             active: false,
             in_edges: Vec::new(),
-            out_edges: Vec::new(),
             output: 0.0,
             activation,
             kind,
+            bias,
         }
     }
 
-    pub fn from_edges(kind: NodeKind, in_edges: Vec<usize>, out_edges: Vec<usize>) -> Node {
+    pub fn from_edges(kind: NodeKind, in_edges: Vec<usize>) -> Node {
         
         // assign activation based on node kind
         let activation = match kind {
@@ -73,10 +70,10 @@ impl Node {
         Node {
             active: false,
             in_edges: in_edges,
-            out_edges: out_edges,
             output: 0.0,
             activation,
             kind,
+            bias: 0.0,
         }
 
     }
@@ -102,7 +99,7 @@ mod test_node {
     use super::*;
 
     fn test_remove_edge() {
-        let mut my_node = Node::new(NodeKind::Sensor);
+        let mut my_node = Node::new(NodeKind::Sensor, 0.0);
         my_node.in_edges.push(1);
         my_node.in_edges.push(2);
         my_node.in_edges.push(3);

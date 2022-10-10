@@ -1,4 +1,4 @@
-use crate::ecology::genome::Genome;
+use crate::community::genome::Genome;
 
 pub struct Organism {
     pub genome: Genome,

@@ -1,5 +1,5 @@
-mod network;
-mod ecology;
+mod neural_network;
+mod community;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

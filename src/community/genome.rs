@@ -1,20 +1,23 @@
 use rand::prelude::*;
 
-use crate::network::node::*;
-use crate::network::edge::Edge;
+use crate::neural_network::node::*;
+use crate::neural_network::edge::Edge;
+use crate::community::community_params::GenomeParams;
 
 #[derive(Clone)]
+#[derive(PartialEq)]  // used in testing
 pub struct Genome {
     pub edge_genes: Vec<Edge>,
     pub node_genes: Vec<Node>,
     pub innovs: Vec<usize>,
-    pub sensor_idx: Vec<usize>,
+    pub sensor_idx: Vec<usize>,  // indices of the sensor nodes
     pub output_idx: Vec<usize>,
+    pub params: GenomeParams,
 }
 
 impl Genome {
 
-    pub fn incompatibility(&self, partner: &Genome, c1: f64, c2: f64, c3: f64, max_innovation: usize) -> f64 {
+    pub fn incompatibility(&self, partner: &Genome, max_innovation: usize) -> f64 {
         
         // align to count disjoint and excess genes
         let (aln_self, aln_partner) = self.align(partner, max_innovation);
@@ -26,7 +29,7 @@ impl Genome {
         let excess = both_ends.iter().max().unwrap();
 
         // double counting some genes, corrected below
-        let mut disjoint = 0;
+        let mut mismatches = 0;
 
         // we'll also count average weight difference here
         let mut diffs = 0.0;
@@ -35,7 +38,7 @@ impl Genome {
             
             // note whether disjoint
             if aln_self[i_num] == -1 || aln_partner[i_num] == -1 {
-                disjoint += 1
+                mismatches += 1
 
             // if not get the difference
             } else {
@@ -50,10 +53,24 @@ impl Genome {
         }
         // normalize
         let excess_norm = *excess as f64 / aln_self.len() as f64;
-        let disjoint_norm = (disjoint - *excess) as f64 / aln_self.len() as f64;
+        let disjoint;
+        if *excess < mismatches {
+            disjoint = mismatches - *excess;
+        } else {
+            disjoint = mismatches;
+        }
+        let disjoint_norm = disjoint as f64 / aln_self.len() as f64;
         let avg_diff = diffs / aln_self.len() as f64;
 
-        c1 * disjoint_norm + c2 * excess_norm * c3 * avg_diff
+        let incompatibility = self.params.disjoint_imp * disjoint_norm 
+                            + self.params.excess_imp * excess_norm
+                            + self.params.weight_imp * avg_diff;
+        
+        incompatibility
+    }
+
+    fn mutate_weight(&mut self, innovation: usize) {
+
     }
 
     // produces vectors of innovation numbers in increasing order
@@ -123,7 +140,7 @@ impl Genome {
     }
 
     // used to construct tests
-    fn _remove_by_innovation(&mut self, i_num: usize) {
+    pub fn _remove_by_innovation(&mut self, i_num: usize) {
         let gene_idx = self.edge_genes.iter()
                                     .position(|elem| elem.innovation == i_num)
                                     .unwrap();
@@ -174,6 +191,7 @@ impl Genome {
             innovs,
             sensor_idx,
             output_idx,
+            params: GenomeParams::new(),
         }
     }
 }
@@ -187,6 +205,8 @@ mod test_genome {
         let mut gen_1 = Genome::new_minimal_dense(2, 3);
         let mut gen_2 = Genome::new_minimal_dense(3, 4);
 
+        gen_1.params = GenomeParams::get_test_params();
+
         gen_2._remove_by_innovation(4);
         gen_2._remove_by_innovation(5);
 
@@ -195,11 +215,11 @@ mod test_genome {
         let excess = 6.;
         let N = 12.;
 
-        let max_avg_weight_diff = 2.;
+        let max_avg_weight_diff = 1.;
 
         let known = disjoint / N + excess / N;
 
-        assert!((gen_1.incompatibility(&gen_2, 1., 1., 1., 20) - known).abs() < max_avg_weight_diff)
+        assert!((gen_1.incompatibility(&gen_2, 20) - known).abs() < max_avg_weight_diff)
     }
 
     #[test]

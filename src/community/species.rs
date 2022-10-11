@@ -6,11 +6,12 @@ use crossbeam::thread;
 
 const NUM_THREADS: usize = 6;
 
+#[derive(Debug)]
 pub struct Species {
     id: usize,
     pub population: Vec<Organism>,
+    next_size: usize,
 }
-
 impl Species {
     // adds an organism to the population
     pub fn add_from_genome(&mut self, gen: Genome) {
@@ -25,6 +26,8 @@ impl Species {
         &self.population[specimen_i]
     }
 
+    // calculates the raw fitness value that must be adjusted before doing any
+    // evolution with it
     // should probably be broken up. e.g. spawn_fitness_thread() or spawn chunk_threads()
     fn calculate_raw_fitness(&self, ffunc: fn(&Organism) -> f64) -> Vec<f64> {
 
@@ -99,10 +102,25 @@ impl Species {
         raw_fitness
     }
 
+    // returns the adjusted fitness values for each individual
+    pub fn calculate_fitness(&self, ffunc: fn(&Organism) -> f64) -> Vec<f64> {
+
+        let raw_fitness = self.calculate_raw_fitness(ffunc);
+        let mut adj_fitness = Vec::with_capacity(raw_fitness.len());
+
+        // normalize by population size
+        for raw_fit in raw_fitness {
+            adj_fitness.push(raw_fit / (self.population.len() as f64));
+        }
+
+        adj_fitness
+    }
+
     pub fn new(id: usize) -> Species {
         Species {
             id,
             population: Vec::new(),
+            next_size: 0,
         }
     }
 }

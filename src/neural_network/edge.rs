@@ -1,5 +1,6 @@
 #[derive(Clone)]
 #[derive(PartialEq)]
+#[derive(Debug)]
 pub struct Edge {
     pub innovation: usize,
     pub source_i: usize,

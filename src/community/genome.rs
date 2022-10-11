@@ -6,6 +6,7 @@ use crate::community::community_params::GenomeParams;
 
 #[derive(Clone)]
 #[derive(PartialEq)]  // used in testing
+#[derive(Debug)]
 pub struct Genome {
     pub edge_genes: Vec<Edge>,
     pub node_genes: Vec<Node>,
@@ -36,11 +37,14 @@ impl Genome {
 
         for i_num in 0..aln_self.len() {
             
+            // neither has gene we just skip this gene
+            if aln_self[i_num] == -1 && aln_self[i_num] == -1 {
+                
             // note whether disjoint
-            if aln_self[i_num] == -1 || aln_partner[i_num] == -1 {
+            } else if aln_self[i_num] == -1 || aln_partner[i_num] == -1 {
                 mismatches += 1
 
-            // if not get the difference
+            // otherwise get the difference
             } else {
                 let self_gi = self.edge_genes.iter().position(|gene| gene.innovation == i_num).unwrap();
                 let part_gi = partner.edge_genes.iter().position(|gene| gene.innovation == i_num).unwrap();
@@ -102,23 +106,19 @@ impl Genome {
                 }
             }
 
-            // if in neither we dont make space in the alignment
-            if in_self || in_partner {
+            // for each genome we add the innovation number if there
+            // else we add a -1
+            if in_self {
+                aln_self.push(i_num as i32);
+            } else {
+                aln_self.push(-1);
+            }
 
-                // for each genome we add the innovation number if there
-                // else we add a -1
-                if in_self {
-                    aln_self.push(i_num as i32);
-                } else {
-                    aln_self.push(-1);
-                }
-
-                // same for partner
-                if in_partner {
-                    aln_partner.push(i_num as i32);
-                } else {
-                    aln_partner.push(-1);
-                }
+            // same for partner
+            if in_partner {
+                aln_partner.push(i_num as i32);
+            } else {
+                aln_partner.push(-1);
             }
         }
 
@@ -234,8 +234,8 @@ mod test_genome {
         gen_2._remove_by_innovation(6);
         gen_2._remove_by_innovation(11);
 
-        let known_1 = vec![0, 1, 2, -1, -1, 5, 7, 8, 9, 10, 11, -1, -1, -1];
-        let known_2 = vec![0, 1, 2,  3,  4, 5, 7, 8, 9, 10, -1, 12, 13, 14];
+        let known_1 = vec![0, 1, 2, -1, -1, 5, -1, 7, 8, 9, 10, 11, -1, -1, -1];
+        let known_2 = vec![0, 1, 2,  3,  4, 5, -1, 7, 8, 9, 10, -1, 12, 13, 14];
 
         let (aln_1, aln_2) = gen_1.align(&gen_2, 20);
 

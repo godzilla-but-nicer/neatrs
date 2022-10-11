@@ -10,6 +10,7 @@ pub enum NodeKind {
 
 #[derive(Clone)]
 #[derive(PartialEq)]
+#[derive(Debug)]
 pub struct Node {
     pub active: bool,                // whether the node has been activated
     pub in_edges: Vec<usize>,        // incoming edges

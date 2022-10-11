@@ -1,3 +1,5 @@
+
+#[derive(Debug)]
 pub struct CommunityParams {
     pub species_thresh: f64,
 }
@@ -11,11 +13,12 @@ impl CommunityParams {
     
     pub fn get_test_params() -> CommunityParams {
         CommunityParams {
-            species_thresh: 1.0,
+            species_thresh: 1.3,
         }
     }
 }
 
+#[derive(Debug)]
 pub struct SpeciesParams {
     mate_percentile: f64
 }
@@ -30,6 +33,7 @@ impl SpeciesParams {
 
 #[derive(Clone)]
 #[derive(PartialEq)]
+#[derive(Debug)]
 pub struct GenomeParams {
     pub disjoint_imp: f64,
     pub excess_imp: f64,
@@ -49,7 +53,7 @@ impl GenomeParams {
         GenomeParams {
             disjoint_imp: 1.,            
             excess_imp: 1.,
-            weight_imp: 0.2,
+            weight_imp: 0.1,
         }
     }
 }

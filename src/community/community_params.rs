@@ -38,6 +38,8 @@ pub struct GenomeParams {
     pub disjoint_imp: f64,
     pub excess_imp: f64,
     pub weight_imp: f64,
+    pub weight_mut_sd: f64,
+    pub bias_mut_sd: f64,
 }
 
 impl GenomeParams {
@@ -46,6 +48,8 @@ impl GenomeParams {
             disjoint_imp: 1.,
             excess_imp: 1.,
             weight_imp: 0.2,
+            weight_mut_sd: 1.0,
+            bias_mut_sd: 1.0,
         }
     }
     
@@ -54,6 +58,8 @@ impl GenomeParams {
             disjoint_imp: 1.,            
             excess_imp: 1.,
             weight_imp: 0.1,
+            weight_mut_sd: 1.0,
+            bias_mut_sd: 1.0,
         }
     }
 }

@@ -2,7 +2,7 @@
 #[derive(PartialEq)]
 #[derive(Debug)]
 pub struct Edge {
-    pub innovation: usize,
+    pub innov: usize,
     pub source_i: usize,
     pub target_i: usize,
     pub weight: f64,
@@ -10,9 +10,9 @@ pub struct Edge {
 }
 
 impl Edge {
-    pub fn new(innovation: usize, source_i: usize, target_i: usize, weight: f64) -> Edge {
+    pub fn new(innov: usize, source_i: usize, target_i: usize, weight: f64) -> Edge {
         Edge {
-            innovation,
+            innov,
             source_i,
             target_i,
             weight,

@@ -92,15 +92,15 @@ impl Community {
         // build genomes
         let mut genome_pool = Vec::with_capacity(n_genomes);
         for _ in 0..n_genomes {
-            genome_pool.push(Genome::new_minimal_dense(inputs, outputs));
+            genome_pool.push(Genome::new_dense(inputs, outputs));
         }
         
         // find the highest innovation number
         let mut max_innov = 0;
         for genome in &genome_pool {
             for gene in &genome.edge_genes {
-                if gene.innovation > max_innov {
-                    max_innov = gene.innovation;
+                if gene.innov > max_innov {
+                    max_innov = gene.innov;
                 }
             }
         }
@@ -111,7 +111,6 @@ impl Community {
             next_innovation: max_innov + 1,
             params: CommunityParams::new(),
         }
-
     }
 }
 
@@ -123,22 +122,22 @@ mod tests {
     #[test]
     fn test_identify_species() {
         // make a couple of sparse genomes
-        let mut gen_1 = Genome::new_minimal_dense(2, 3);
+        let mut gen_1 = Genome::new_dense(2, 3);
         gen_1._remove_by_innovation(0);
         gen_1._remove_by_innovation(1);
         gen_1._remove_by_innovation(2);
         gen_1._remove_by_innovation(4);
 
-        let mut gen_2 = Genome::new_minimal_dense(2, 3);
+        let mut gen_2 = Genome::new_dense(2, 3);
         gen_2._remove_by_innovation(0);
         gen_2._remove_by_innovation(1);
         gen_2._remove_by_innovation(2);
         gen_2.params = GenomeParams::get_test_params();
 
         // make a couple of dense genomes
-        let mut gen_3 = Genome::new_minimal_dense(2, 3);
+        let mut gen_3 = Genome::new_dense(2, 3);
         gen_3.params = GenomeParams::get_test_params();
-        let mut gen_4 = Genome::new_minimal_dense(2, 3);
+        let mut gen_4 = Genome::new_dense(2, 3);
         gen_4.params = GenomeParams::get_test_params();
 
         // make community and assign species
@@ -164,13 +163,13 @@ mod tests {
     #[test]
     fn test_next_species_sizes() {
         // make a sparse genome
-        let mut gen_1 = Genome::new_minimal_dense(2, 3);
+        let mut gen_1 = Genome::new_dense(2, 3);
         gen_1._remove_by_innovation(0);
         gen_1._remove_by_innovation(1);
         gen_1._remove_by_innovation(2);
         gen_1._remove_by_innovation(4);
         
-        let mut gen_4 = Genome::new_minimal_dense(2, 3);
+        let mut gen_4 = Genome::new_dense(2, 3);
         gen_4._remove_by_innovation(0);
         gen_4._remove_by_innovation(1);
         gen_4._remove_by_innovation(2);
@@ -178,9 +177,9 @@ mod tests {
         gen_1.params = GenomeParams::get_test_params();
 
         // make a couple of dense genomes
-        let mut gen_2 = Genome::new_minimal_dense(2, 3);
+        let mut gen_2 = Genome::new_dense(2, 3);
         gen_2.params = GenomeParams::get_test_params();
-        let mut gen_3 = Genome::new_minimal_dense(2, 3);
+        let mut gen_3 = Genome::new_dense(2, 3);
         gen_3.params = GenomeParams::get_test_params();
 
         // make community and assign species

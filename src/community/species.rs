@@ -136,9 +136,9 @@ mod tests {
         }
         
         // genome size is easy test fitness func
-        let gen_1 = Genome::new_minimal_dense(2, 1);
-        let gen_2 = Genome::new_minimal_dense(3, 1);
-        let gen_3 = Genome::new_minimal_dense(3, 2);
+        let gen_1 = Genome::new_dense(2, 1);
+        let gen_2 = Genome::new_dense(3, 1);
+        let gen_3 = Genome::new_dense(3, 2);
         
         let mut test_species = Species::new(0);
         test_species.add_from_genome(gen_1);

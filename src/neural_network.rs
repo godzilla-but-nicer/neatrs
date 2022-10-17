@@ -151,7 +151,7 @@ mod test_neural_network {
     #[test]
     fn test_from_genome() {
         // init the network from a genome
-        let gen = Genome::new_minimal_dense(3, 4);
+        let gen = Genome::new_dense(3, 4);
         let nn = NeuralNetwork::from_genome(&gen); 
 
         // debug
@@ -175,7 +175,7 @@ mod test_neural_network {
 
     #[test]
     fn test_node_ready() {
-        let gen = Genome::new_minimal_dense(3, 2);
+        let gen = Genome::new_dense(3, 2);
         let mut nn = NeuralNetwork::from_genome(&gen);
         nn.nodes[0].active = true;
         nn.nodes[1].active = true;
@@ -185,7 +185,7 @@ mod test_neural_network {
 
     #[test]
     fn test_propagate() {
-        let gen = Genome::new_minimal_dense(3, 2);
+        let gen = Genome::new_dense(3, 2);
         let mut nn = NeuralNetwork::from_genome(&gen);
 
         // set weights to something easy

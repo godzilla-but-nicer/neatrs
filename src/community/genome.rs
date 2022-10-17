@@ -1,8 +1,12 @@
 use rand::prelude::*;
+use rand_distr::Normal;
+use std::result::Result;
+use std::error::Error;
 
 use crate::neural_network::node::*;
 use crate::neural_network::edge::Edge;
 use crate::community::community_params::GenomeParams;
+
 
 #[derive(Clone)]
 #[derive(PartialEq)]  // used in testing
@@ -46,8 +50,8 @@ impl Genome {
 
             // otherwise get the difference
             } else {
-                let self_gi = self.edge_genes.iter().position(|gene| gene.innovation == i_num).unwrap();
-                let part_gi = partner.edge_genes.iter().position(|gene| gene.innovation == i_num).unwrap();
+                let self_gi = self.edge_genes.iter().position(|gene| gene.innov == i_num).unwrap();
+                let part_gi = partner.edge_genes.iter().position(|gene| gene.innov == i_num).unwrap();
 
                 let self_weight = self.edge_genes[self_gi].weight;
                 let part_weight = partner.edge_genes[part_gi].weight;
@@ -73,9 +77,7 @@ impl Genome {
         incompatibility
     }
 
-    fn mutate_weight(&mut self, innovation: usize) {
 
-    }
 
     // produces vectors of innovation numbers in increasing order
     // and of the same length filled with -1 where disjoint or excess
@@ -92,7 +94,7 @@ impl Genome {
             // check if the gene_ is found in self
             let mut in_self = false;
             for s_gene in &self.edge_genes {
-                if i_num == s_gene.innovation {
+                if i_num == s_gene.innov {
                     in_self = true;
                     break
                 }
@@ -100,7 +102,7 @@ impl Genome {
 
             let mut in_partner = false;            
             for p_gene in &partner.edge_genes {
-                if i_num == p_gene.innovation {
+                if i_num == p_gene.innov {
                     in_partner = true;
                     break
                 }
@@ -139,16 +141,80 @@ impl Genome {
 
     }
 
+    // mutation functions
+    // we'll start simple. perturb all weights
+    fn mutate_weights(&mut self) {
+        let normal = Normal::new(0., self.params.weight_mut_sd).unwrap();
+        for gene in &mut self.edge_genes {
+            gene.weight += normal.sample(&mut rand::thread_rng());
+        }
+    }
+
+    fn mutate_bias(&mut self) {
+        let normal = Normal::new(0., self.params.bias_mut_sd).unwrap();
+        for gene in &mut self.node_genes {
+            gene.bias += normal.sample(&mut rand::thread_rng());
+        }
+    }
+
+    // disable an edge gene
+    fn enable_disable(&mut self, innov: usize) {
+        let iidx = self.index_from_innov(innov);
+        self.edge_genes[iidx].enabled = !self.edge_genes[iidx].enabled;
+    }
+    
+    // add node "on" an existing edge
+    fn insert_node(&mut self, innov: usize, max_innov: usize) {
+        
+        // identify ends of new edges
+        let iidx = self.index_from_innov(innov);
+        let old_source = self.edge_genes[iidx].source_i;
+        let old_target = self.edge_genes[iidx].target_i;
+        let node_i = self.node_genes.len();
+
+        // construct new genes
+        let mut rng = rand::thread_rng();
+        let new_node = Node::new(NodeKind::Hidden, rng.gen_range(-1.0..1.0));
+        let inner_edge = Edge::new(max_innov + 1, old_source, node_i, rng.gen_range(-1.0..1.0));
+        let outer_edge = Edge::new(max_innov + 2, node_i, old_target, rng.gen_range(-1.0..1.0));
+
+        // remove olg edge and add new stuff
+        self.node_genes.push(new_node);
+        self.edge_genes.swap_remove(iidx);
+        self.edge_genes.push(inner_edge);
+        self.edge_genes.push(outer_edge);
+    }
+
     // used to construct tests
     pub fn _remove_by_innovation(&mut self, i_num: usize) {
         let gene_idx = self.edge_genes.iter()
-                                    .position(|elem| elem.innovation == i_num)
+                                    .position(|elem| elem.innov == i_num)
                                     .unwrap();
         self.edge_genes.remove(gene_idx);
     }
 
+    // helper functions
+    fn index_from_innov(&self, innov: usize) -> usize {
+
+        let mut found = false;
+        let mut iidx = 0;
+
+        for gene_i in 0..self.edge_genes.len() {
+            if self.edge_genes[gene_i].innov == innov {
+                iidx = gene_i;
+                found = true;
+            }
+        }
+
+        if found {
+            return iidx
+        } else {
+            panic!("Innovation number not found in genome");
+        }
+    }
+
     // genome that translates to a dense two-layer network
-    pub fn new_minimal_dense(sensors: usize, outputs: usize) -> Genome {
+    pub fn new_dense(sensors: usize, outputs: usize) -> Genome {
 
         // rng for gene initialization
         let mut rng = rand::thread_rng();
@@ -197,13 +263,13 @@ impl Genome {
 }
 
 #[cfg(test)]
-mod test_genome {
+mod tests {
     use super::*;
 
     #[test]
     fn test_incompatibility() {
-        let mut gen_1 = Genome::new_minimal_dense(2, 3);
-        let mut gen_2 = Genome::new_minimal_dense(3, 4);
+        let mut gen_1 = Genome::new_dense(2, 3);
+        let mut gen_2 = Genome::new_dense(3, 4);
 
         gen_1.params = GenomeParams::get_test_params();
 
@@ -224,8 +290,8 @@ mod test_genome {
 
     #[test]
     fn test_align() {
-        let mut gen_1 = Genome::new_minimal_dense(3, 4);
-        let mut gen_2 = Genome::new_minimal_dense(3, 5);
+        let mut gen_1 = Genome::new_dense(3, 4);
+        let mut gen_2 = Genome::new_dense(3, 5);
 
         // remove a couple of genes
         gen_1._remove_by_innovation(3);
@@ -245,5 +311,18 @@ mod test_genome {
 
         assert_eq!(known_1, aln_1);
         assert_eq!(known_2, aln_2)
+    }
+
+    #[test]
+    fn test_insert_node() {
+        let mut gen = Genome::new_dense(3, 4);
+        // mut innov = 5
+        gen.insert_node(5, 11);
+        assert!(gen.node_genes.len() == 8);
+        assert!(gen.edge_genes.len() == 13);
+        assert!(gen.edge_genes[11].source_i == 1);
+        assert!(gen.edge_genes[11].target_i == 7);
+        assert!(gen.edge_genes[12].source_i == 7);
+        assert!(gen.edge_genes[12].target_i == 4);
     }
 }

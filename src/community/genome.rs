@@ -1,7 +1,5 @@
 use rand::prelude::*;
 use rand_distr::Normal;
-use std::result::Result;
-use std::error::Error;
 
 use crate::neural_network::node::*;
 use crate::neural_network::edge::Edge;
@@ -178,11 +176,19 @@ impl Genome {
         let inner_edge = Edge::new(max_innov + 1, old_source, node_i, rng.gen_range(-1.0..1.0));
         let outer_edge = Edge::new(max_innov + 2, node_i, old_target, rng.gen_range(-1.0..1.0));
 
-        // remove olg edge and add new stuff
+        // remove old edge and add new stuff
         self.node_genes.push(new_node);
         self.edge_genes.swap_remove(iidx);
         self.edge_genes.push(inner_edge);
         self.edge_genes.push(outer_edge);
+    }
+
+    fn add_connection(&mut self, source_i: usize, target_i: usize, max_innov: usize) {
+
+        // construct the edge and add it to the list
+        let mut rng = rand::thread_rng();
+        let new_edge = Edge::new(max_innov + 1, source_i, target_i, rng.gen_range(-1.0..1.0));
+        self.edge_genes.push(new_edge);
     }
 
     // used to construct tests
@@ -324,5 +330,18 @@ mod tests {
         assert!(gen.edge_genes[11].target_i == 7);
         assert!(gen.edge_genes[12].source_i == 7);
         assert!(gen.edge_genes[12].target_i == 4);
+    }
+
+    #[test]
+    fn test_add_connection() {
+        let mut gen = Genome::new_dense(3, 4);
+        gen._remove_by_innovation(5);
+        gen.add_connection(1, 4, 11);
+
+        let new_edge = gen.edge_genes.last().unwrap().clone();
+
+        assert!(new_edge.innov == 12);
+        assert!(new_edge.source_i == 1);
+        assert!(new_edge.target_i == 4);
     }
 }

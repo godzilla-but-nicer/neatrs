@@ -19,4 +19,14 @@ impl Edge {
             enabled: true,
         }
     }
+
+    pub fn new_dummy(innov: usize) -> Edge {
+        Edge {
+            innov,
+            source_i: 0,
+            target_i: 0,
+            weight: 0.0,
+            enabled: false,
+        }
+    }
 }

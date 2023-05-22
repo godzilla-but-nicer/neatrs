@@ -6,6 +6,24 @@ use crate::neural_network::edge::Edge;
 use crate::community::community_params::GenomeParams;
 
 
+// could put values here for the output values and do fancy pattern matching
+#[derive(Clone)]
+#[derive(PartialEq)]
+#[derive(Debug)]
+pub enum NodeGene {
+    Sensor(Node),
+    Hidden(Node),
+    Output(Node),
+}
+
+#[derive(Clone)]
+#[derive(PartialEq)]
+#[derive(Debug)]
+pub enum EdgeGenes {
+    Forward(Edge),
+    Recurrant(Edge),
+}
+
 #[derive(Clone)]
 #[derive(PartialEq)]  // used in testing
 #[derive(Debug)]
@@ -75,71 +93,70 @@ impl Genome {
         incompatibility
     }
 
+    
+    // mutation functions
+    // main mutation function that calls the other mutation functions
+    // returns the number of new innovation numbers
+    fn mutate(&mut self, max_innov: usize, structural: bool) -> usize {
 
+        let new_innovs: usize;
+        let mut rng = rand::thread_rng();
+        
+        // we do either a single random structural mutation or all weight mutations
+        if structural {
+            let roll: f64 = rng.gen();
+            // first try adding a node
+            if roll < self.params.insert_prob {
 
-    // produces vectors of innovation numbers in increasing order
-    // and of the same length filled with -1 where disjoint or excess
-    // right now we copy the edge_lists of both. could be better
-    pub fn align(&self, partner: &Genome, total_innovations: usize) -> (Vec<i32>, Vec<i32>) {
+                let mutate_edge = self.innovs.choose(&mut rng).unwrap();
+                self.insert_node(*mutate_edge, max_innov);
+                return 2
 
-        // alignment vectors of the two genomes
-        let mut aln_self = Vec::new();
-        let mut aln_partner = Vec::new();
+            // then try making a connection. currently only makes feed forward edges
+            } else if roll < self.params.connect_prob + self.params.insert_prob {
 
-        // iterate over possible genes the alignment
-        for i_num in 0..total_innovations {
-
-            // check if the gene_ is found in self
-            let mut in_self = false;
-            for s_gene in &self.edge_genes {
-                if i_num == s_gene.innov {
-                    in_self = true;
-                    break
+                // for now we need to ensure that the new edges are feed-forward
+                let mut hidden_idx = Vec::new();
+                for node_i in 0..self.node_genes.len() {
+                    if self.node_genes[node_i].kind == NodeKind::Hidden {
+                        hidden_idx.push(node_i);
+                    }
                 }
-            }
 
-            let mut in_partner = false;            
-            for p_gene in &partner.edge_genes {
-                if i_num == p_gene.innov {
-                    in_partner = true;
-                    break
+                // to ensure feed-forwardness we can't start with an output
+                let mut non_outputs = self.sensor_idx.clone();
+                non_outputs.append(&mut hidden_idx.clone());
+                let source_i = *non_outputs.choose(&mut rng).unwrap();                
+                
+                let target_i: usize;
+                // sensors can connect to hidden nodes
+                if self.node_genes[source_i].kind == NodeKind::Sensor {
+                    target_i = *hidden_idx.choose(&mut rng).unwrap();
+                // hidden nodes can connect to outputs
+                } else {
+                    target_i = *self.output_idx.choose(&mut rng).unwrap();
                 }
-            }
 
-            // for each genome we add the innovation number if there
-            // else we add a -1
-            if in_self {
-                aln_self.push(i_num as i32);
+                // finally we can make the connection
+                self.add_connection(source_i, target_i, max_innov);
+                
+                return 1
+            
+            // otherwise toggle a random edge
             } else {
-                aln_self.push(-1);
+                let toggle_edge = self.innovs.choose(&mut rng).unwrap();
+                self.enable_disable(*toggle_edge);
+                return 0
             }
-
-            // same for partner
-            if in_partner {
-                aln_partner.push(i_num as i32);
-            } else {
-                aln_partner.push(-1);
-            }
-        }
-
-        // trim the end off of the innovation numbers
-        let self_keep = aln_self.iter().rposition(|x| *x != -1_i32).unwrap() + 1;
-        let partner_keep = aln_partner.iter().rposition(|x| *x != -1_i32).unwrap() + 1;
-
-        if self_keep > partner_keep {
-            aln_self.resize(self_keep, -1);
-            aln_partner.resize(self_keep, -1);
+        
+        // if we're not doing a structural mutation we fiddle with weights
         } else {
-            aln_self.resize(partner_keep, -1);
-            aln_partner.resize(partner_keep, -1);
+            self.mutate_weights();
+            self.mutate_bias();
+            return 0
         }
-
-
-        (aln_self, aln_partner)
-
     }
 
-    // mutation functions
     // we'll start simple. perturb all weights
     fn mutate_weights(&mut self) {
         let normal = Normal::new(0., self.params.weight_mut_sd).unwrap();
@@ -148,6 +165,7 @@ impl Genome {
         }
     }
 
+    // perturb node biases
     fn mutate_bias(&mut self) {
         let normal = Normal::new(0., self.params.bias_mut_sd).unwrap();
         for gene in &mut self.node_genes {
@@ -157,7 +175,7 @@ impl Genome {
 
     // disable an edge gene
     fn enable_disable(&mut self, innov: usize) {
-        let iidx = self.index_from_innov(innov);
+        let iidx = self.edge_index_from_innov(innov);
         self.edge_genes[iidx].enabled = !self.edge_genes[iidx].enabled;
     }
     
@@ -165,7 +183,7 @@ impl Genome {
     fn insert_node(&mut self, innov: usize, max_innov: usize) {
         
         // identify ends of new edges
-        let iidx = self.index_from_innov(innov);
+        let iidx = self.edge_index_from_innov(innov);
         let old_source = self.edge_genes[iidx].source_i;
         let old_target = self.edge_genes[iidx].target_i;
         let node_i = self.node_genes.len();
@@ -183,12 +201,25 @@ impl Genome {
         self.edge_genes.push(outer_edge);
     }
 
+    // add a new edge gene. currently only supports feed forward
     fn add_connection(&mut self, source_i: usize, target_i: usize, max_innov: usize) {
 
-        // construct the edge and add it to the list
         let mut rng = rand::thread_rng();
+
+        // ensure that edge is feed forward (and single layered)
+        if self.node_genes[source_i].kind == NodeKind::Sensor {
+            assert!(self.node_genes[target_i].kind == NodeKind::Hidden 
+                 || self.node_genes[target_i].kind == NodeKind::Output)
+        } else if self.node_genes[target_i].kind == NodeKind::Hidden {
+            assert!(self.node_genes[target_i].kind == NodeKind::Output)
+        }
+
+        // create and add edge
         let new_edge = Edge::new(max_innov + 1, source_i, target_i, rng.gen_range(-1.0..1.0));
         self.edge_genes.push(new_edge);
+
+        // update the innovation number list
+        self.innovs.push(max_innov + 1);
     }
 
     // used to construct tests
@@ -200,7 +231,7 @@ impl Genome {
     }
 
     // helper functions
-    fn index_from_innov(&self, innov: usize) -> usize {
+    pub fn edge_index_from_innov(&self, innov: usize) -> Option<usize> {
 
         let mut found = false;
         let mut iidx = 0;
@@ -209,15 +240,56 @@ impl Genome {
             if self.edge_genes[gene_i].innov == innov {
                 iidx = gene_i;
                 found = true;
+                break
             }
         }
 
         if found {
-            return iidx
+            return Some(iidx)
         } else {
-            panic!("Innovation number not found in genome");
+            return None;
         }
     }
+    
+    
+    pub fn node_index_from_innov(&self, innov: usize) -> Option<usize> {
+
+        let mut found = false;
+        let mut iidx = 0;
+
+        for gene_i in 0..self.edge_genes.len() {
+            if self.node_genes[gene_i].innov == innov {
+                iidx = gene_i;
+                found = true;
+                break
+            }
+        }
+
+        if found {
+            return Some(iidx)
+        } else {
+            return None;
+        }
+    }
+
+
+    // basic constructor that takes a list of edges and the indices of fixed nodes 
+    pub fn new(nodes: Vec<Node>, edges: Vec<Edge>, sensors: Vec<usize>, outputs: Vec<usize>) -> Genome {
+        let mut innovs = Vec::new();
+        for i in 0..edges.len() {
+            innovs.push(edges[i].innov)
+        }
+
+        Genome{
+            node_genes: nodes,
+            edge_genes: edges,
+            sensor_idx: sensors,
+            output_idx: outputs,
+            innovs: innovs,
+            params: GenomeParams::new(),
+        }
+    }
+
 
     // genome that translates to a dense two-layer network
     pub fn new_dense(sensors: usize, outputs: usize) -> Genome {
@@ -295,29 +367,6 @@ mod tests {
     }
 
     #[test]
-    fn test_align() {
-        let mut gen_1 = Genome::new_dense(3, 4);
-        let mut gen_2 = Genome::new_dense(3, 5);
-
-        // remove a couple of genes
-        gen_1._remove_by_innovation(3);
-        gen_1._remove_by_innovation(4);
-        gen_1._remove_by_innovation(6);
-        gen_2._remove_by_innovation(6);
-        gen_2._remove_by_innovation(11);
-
-        let known_1 = vec![0, 1, 2, -1, -1, 5, -1, 7, 8, 9, 10, 11, -1, -1, -1];
-        let known_2 = vec![0, 1, 2,  3,  4, 5, -1, 7, 8, 9, 10, -1, 12, 13, 14];
-
-        let (aln_1, aln_2) = gen_1.align(&gen_2, 20);
-
-        // debug
-        println!("{:?}", aln_1);
-        println!("{:?}", aln_2);
-
-        assert_eq!(known_1, aln_1);
-        assert_eq!(known_2, aln_2)
-    }
 
     #[test]
     fn test_insert_node() {
@@ -330,6 +379,8 @@ mod tests {
         assert!(gen.edge_genes[11].target_i == 7);
         assert!(gen.edge_genes[12].source_i == 7);
         assert!(gen.edge_genes[12].target_i == 4);
+        assert!(gen.innovs[5] == 6);
+        assert!(gen.innovs.last().unwrap() == &12);
     }
 
     #[test]
@@ -343,5 +394,6 @@ mod tests {
         assert!(new_edge.innov == 12);
         assert!(new_edge.source_i == 1);
         assert!(new_edge.target_i == 4);
+        assert!(gen.innovs[12] == 12);
     }
 }

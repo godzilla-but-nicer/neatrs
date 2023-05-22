@@ -1,9 +1,9 @@
 pub mod edge;
 pub mod node;
 
-use crate::neural_network::node::{Node, NodeKind};
+use crate::neural_network::node::Node;
 use crate::neural_network::edge::Edge;
-use crate::community::genome::Genome;
+use crate::community::genome::{Genome, NodeGene};
 
 struct NeuralNetwork {
     nodes: Vec<Node>,
@@ -19,19 +19,23 @@ impl NeuralNetwork {
     // because we cant guarentee the order of the nodes in the vec, we must
     // iterate until outputs are active. with each iteration the activation
     // depth grows by one layer.
-    fn propagate(&mut self) {
+    fn propagate(&mut self, inputs: Vec<f64>) {
 
         // iterated in outer loop. panics when > max_depth
         let mut layer_count: usize = 0;
 
+        // activate the sensors
+        self.load_sensors(inputs);
+
         // outer iteration which we continue until outputs are activated
+        // is there an algorithm we could use here?
         while self.outputs_inactive() {
 
-            // iteration over all nodes to perform activations
-            for node_i in 0..self.nodes.len() {
+            // iteration over all nonsensor nodes to perform activations
+            for node_i in self.sensor_idx.len()..self.nodes.len() {
 
                 // never need to activate sensors
-                if self.nodes[node_i].kind != NodeKind::Sensor {
+                if  ! self.sensor_idx.contains(&node_i) {
 
                     // if the node's inputs are active we activate
                     if self.node_ready(node_i) {
@@ -50,18 +54,19 @@ impl NeuralNetwork {
 
     // check if a node is ready to be activated
     fn node_ready(&self, node_i: usize) -> bool {
+
         for edge_i in &self.nodes[node_i].in_edges {
 
             // locate the focal input
             let edge = &self.edges[*edge_i];
             let source_node = &self.nodes[edge.source_i];
             
-            if !source_node.active {
-                return false
+            if source_node.active {
+                return true
             }
         }
-        // no input is inactive
-        return true
+        // no input is active
+        return false
     }
 
     // calculate net input and activate a node
@@ -115,6 +120,7 @@ impl NeuralNetwork {
             self.nodes[*sensor_j].active = true;
         }
     }
+     
 
     // construct network from genome. primary constructor
     fn from_genome(genome: &Genome) -> NeuralNetwork {
@@ -142,7 +148,7 @@ impl NeuralNetwork {
 
     }
 }
-
+    
 #[cfg(test)]
 mod test_neural_network {
     use super::*;
@@ -160,8 +166,8 @@ mod test_neural_network {
                                                     nn.edges[edge_i].source_i,
                                                     nn.edges[edge_i].weight, 
                                                     nn.edges[edge_i].target_i);
-        }
-
+                                                }
+                                                
         for node_i in 0..nn.nodes.len() {
             println!("idx: {}, output: {}, kind: {:?}, in_edges: {:?}", node_i, 
                                                         nn.nodes[node_i].output,
@@ -182,12 +188,12 @@ mod test_neural_network {
         nn.nodes[2].active = true;
         assert!(nn.node_ready(4))
     }
-
+    
     #[test]
     fn test_propagate() {
         let gen = Genome::new_dense(3, 2);
         let mut nn = NeuralNetwork::from_genome(&gen);
-
+        
         // set weights to something easy
         for i in 0..nn.edges.len() {
             nn.edges[i].weight = i as f64;
@@ -225,9 +231,9 @@ mod test_neural_network {
         net_comps_4.push(nn.nodes[4].bias);
         println!("Node 3 inputs: {:?}", net_comps_3);
         println!("Node 4 inputs: {:?}", net_comps_4);
-
+        
         let outputs = nn.get_outputs();
-
+        
         assert!((outputs[0] - 0.997527).abs() < 1e-3);
         assert!((outputs[1] - 0.993307).abs() < 1e-3)
     }

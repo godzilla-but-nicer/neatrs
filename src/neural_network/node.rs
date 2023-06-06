@@ -1,14 +1,19 @@
-
 #[derive(Clone)]
 #[derive(PartialEq)]
 #[derive(Debug)]
 pub struct Node {
     pub innov: usize,                // innovation number for the nodes
-    pub active: bool,                // whether the node has been activated
     pub in_edges: Vec<usize>,        // incoming edges
+    pub out_edges: Vec<usize>,       // we're going to want these for graph theory purposes
     pub output: f64,                 // signal to send to downstream nodes
     pub activation: fn(f64) -> f64,  // net_input -> output
     pub bias: f64,                   // bias that is added to node input
+}
+
+enum NodeKind {
+    Input,
+    Output,
+    General,
 }
 
 impl Node {
@@ -27,8 +32,8 @@ impl Node {
     // default constructor. edge logic handled in network
     pub fn new(innov: usize, bias: f64, activation: fn(f64) -> f64) -> Node {
         Node {
-            active: false,
             in_edges: Vec::new(),
+            out_edges: Vec::new(),
             output: 0.0,
             innov,
             bias,
@@ -39,8 +44,8 @@ impl Node {
     pub fn from_edges(innov: usize, in_edges: Vec<usize>, out_edges: Vec<usize>, bias: f64) -> Node {
         
         Node {
-            active: false,
             in_edges: in_edges,
+            out_edges: out_edges,
             output: 0.0,
             activation: Node::sigmoid,
             innov,

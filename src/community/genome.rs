@@ -6,22 +6,10 @@ use crate::neural_network::edge::Edge;
 use crate::community::community_params::GenomeParams;
 
 
-// could put values here for the output values and do fancy pattern matching
-#[derive(Clone)]
-#[derive(PartialEq)]
-#[derive(Debug)]
-pub enum NodeGene {
-    Sensor(Node),
-    Hidden(Node),
-    Output(Node),
-}
-
-#[derive(Clone)]
-#[derive(PartialEq)]
-#[derive(Debug)]
-pub enum EdgeGenes {
-    Forward(Edge),
-    Recurrant(Edge),
+// little reporter enum to keep track of innovation numbers following mutation
+enum MutationInfo {
+    Quantitative,
+    Topological {nodes_added: usize, edges_added: usize },
 }
 
 #[derive(Clone)]
@@ -97,7 +85,7 @@ impl Genome {
     // mutation functions
     // main mutation function that calls the other mutation functions
     // returns the number of new innovation numbers
-    fn mutate(&mut self, max_innov: usize, structural: bool) -> usize {
+    fn mutate(&mut self, max_innov: usize, structural: bool) -> MutationInfo {
 
         let new_innovs: usize;
         let mut rng = rand::thread_rng();
@@ -110,50 +98,44 @@ impl Genome {
 
                 let mutate_edge = self.innovs.choose(&mut rng).unwrap();
                 self.insert_node(*mutate_edge, max_innov);
-                return 2
+                return MutationInfo::Topological { nodes_added: 1, edges_added: 2 }
 
-            // then try making a connection. currently only makes feed forward edges
+            // then try making a connection
             } else if roll < self.params.connect_prob + self.params.insert_prob {
 
-                // for now we need to ensure that the new edges are feed-forward
-                let mut hidden_idx = Vec::new();
+                // we're going to restrict the topology such that
+                // sensors have no in-degree and outputs have no out-degree
+                let mut non_sensors = Vec::new();
+                let mut non_outputs = Vec::new();
+
                 for node_i in 0..self.node_genes.len() {
-                    if self.node_genes[node_i].kind == NodeKind::Hidden {
-                        hidden_idx.push(node_i);
+                    if !self.sensor_idx.contains(&node_i) {
+                        non_sensors.push(node_i);
+                    } else if !self.output_idx.contains(&node_i) {
+                        non_outputs.push(node_i);
                     }
                 }
 
-                // to ensure feed-forwardness we can't start with an output
-                let mut non_outputs = self.sensor_idx.clone();
-                non_outputs.append(&mut hidden_idx.clone());
-                let source_i = *non_outputs.choose(&mut rng).unwrap();                
-                
-                let target_i: usize;
-                // sensors can connect to hidden nodes
-                if self.node_genes[source_i].kind == NodeKind::Sensor {
-                    target_i = *hidden_idx.choose(&mut rng).unwrap();
-                // hidden nodes can connect to outputs
-                } else {
-                    target_i = *self.output_idx.choose(&mut rng).unwrap();
-                }
+                let source_i = *non_outputs.choose(&mut rng).unwrap();
+                let target_i = *non_sensors.choose(&mut rng).unwrap();
 
                 // finally we can make the connection
                 self.add_connection(source_i, target_i, max_innov);
                 
-                return 1
+                return MutationInfo::Topological { nodes_added: 0, edges_added: 1 }
             
             // otherwise toggle a random edge
             } else {
                 let toggle_edge = self.innovs.choose(&mut rng).unwrap();
                 self.enable_disable(*toggle_edge);
-                return 0
+                return MutationInfo::Topological { nodes_added: 0, edges_added: 0 }
             }
         
         // if we're not doing a structural mutation we fiddle with weights
         } else {
             self.mutate_weights();
             self.mutate_bias();
-            return 0
+            return MutationInfo::Quantitative
         }
     }
 
@@ -180,13 +162,12 @@ impl Genome {
     }
     
     // add node "on" an existing edge
-    fn insert_node(&mut self, innov: usize, max_innov: usize) {
+    fn insert_node(&mut self, edge_innov: usize, max_innov: usize) {
         
         // identify ends of new edges
-        let iidx = self.edge_index_from_innov(innov);
-        let old_source = self.edge_genes[iidx].source_i;
-        let old_target = self.edge_genes[iidx].target_i;
-        let node_i = self.node_genes.len();
+        let iidx = self.edge_index_from_innov(edge_innov).unwrap();
+        let old_source = self.edge_genes[iidx].source_innov;
+        let old_target = self.edge_genes[iidx].target_innov;
 
         // construct new genes
         let mut rng = rand::thread_rng();

@@ -2,6 +2,7 @@ mod community_params;
 pub mod genome;
 mod organism;
 mod species;
+mod fitness_calculator;
 
 use crate::community::genome::Genome;
 use crate::community::species::Species;

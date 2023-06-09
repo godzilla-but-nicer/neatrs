@@ -1,5 +1,6 @@
 mod neural_network;
 mod community;
+mod concurrency;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

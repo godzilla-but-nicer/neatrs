@@ -1,12 +1,43 @@
-mod community_params;
 pub mod genome;
 mod organism;
 mod species;
+mod recombination;
+mod innovation_tracker;
+mod mutation;
 
 use crate::community::genome::Genome;
 use crate::community::species::Species;
-use crate::community::community_params::CommunityParams;
 use crate::community::organism::Organism;
+use crate::community::recombination::{Alignment, AlignmentParams};
+
+
+#[derive(Debug)]
+pub struct CommunityParams {
+    pub species_thresh: f64,
+    pub disjoint_importance: f64,
+    pub excess_importance: f64,
+    pub weight_importance: f64,
+}
+
+impl CommunityParams {
+    pub fn new() -> CommunityParams {
+        CommunityParams {
+            species_thresh: 1.5,
+            disjoint_importance: 1.,
+            excess_importance: 1.,
+            weight_importance: 0.2,
+        }
+    }
+    
+    pub fn get_test_params() -> CommunityParams {
+        CommunityParams {
+            species_thresh: 1.3,
+            disjoint_importance: 1.,            
+            excess_importance: 1.,
+            weight_importance: 0.1,
+        }
+    }
+}
 
 pub struct Community {
     genome_pool: Vec<Genome>,
@@ -39,11 +70,20 @@ impl Community {
                 // check each species
                 for sp_i in 0..species_list.len() {
 
+                    // get incompatability with a random genome serving as proxy for the species
                     let paragon = species_list[sp_i].get_random_specimen();
-                    let incomp = genome.incompatibility(&paragon.genome, 
-                                                        self.next_innovation);
+                    let a_params = AlignmentParams { crossover_mode: recombination::CrossoverMode::SimpleRandom }; // this is extremely sketchy, I should expand CrossoverMode to include an Unknown option for when it shouldnt matter
+                    let mismatches = Alignment::raw_incompatibility(&paragon.genome, 
+                                                                       &genome,
+                                                                    &a_params);
+                    let disjoint = self.params.disjoint_importance * mismatches.base_disjoint;
+                    let excess = self.params.excess_importance * mismatches.base_excess;
+                    let weight_diff = self.params.weight_importance * mismatches.base_weight_diff;
+
+                    let incompatability = disjoint + excess + weight_diff;
+
                     // if sufficiently compatible add to species, move on
-                    if incomp < self.params.species_thresh {
+                    if incompatability < self.params.species_thresh {
                         species_list[sp_i].add_from_genome(genome.clone());
                         break
 
@@ -117,7 +157,7 @@ impl Community {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::community::community_params::*;
+    use genome::GenomeParams;
 
     #[test]
     fn test_identify_species() {

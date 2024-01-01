@@ -12,6 +12,16 @@ use super::mutation::MutationInfo;
 
 const NUM_THREADS: usize = 6;
 
+/// Provides named fields for parameters that specify how species and reproduction function.
+/// 
+/// # Attributes
+/// 
+/// * `mate_fraction` - proportion of the highest fitness individuals who get to reproduce in the
+///   current round
+/// * `num_elites` - Number of individuals who get to pass along their genomes without the process
+///   of sexual reproduction
+/// * `prob_structural` - The probability of a structural mutation occurring during reproduction
+/// * `crossover_mode` - The type of crossing other that occurs when recombining a a child genome
 #[derive(Debug)]
 pub struct SpeciesParams {
     pub mate_fraction: f64,
@@ -45,6 +55,15 @@ pub struct ReproductionUpdates {
     innovation_tracker: InnovationTracker,
 }
 
+/// The Species struct holds all of the data for sorting the population of genomes into subgroups
+/// for reproduction along with methods for handling reproduction.
+/// 
+/// # Attributes
+/// 
+/// * `id` - Number identifying the species
+/// * `size` - Number of individuals in the species
+/// * `population` - Vector of Organisms making up the species
+/// * `params` - Struct holding the relevant parameters
 #[derive(Debug)]
 pub struct Species {
     id: usize,
@@ -54,31 +73,37 @@ pub struct Species {
 }
 
 impl Species {
-    // adds an organism to the population
+    /// Add an Organism to the population from its Genome
     pub fn add_from_genome(&mut self, gen: Genome) {
         let new_org = Organism::new(gen);
         self.population.push(new_org);
     }
 
-    // produce a random member to check compatibility
+    /// Produces a random member of the Species used to check compatability when populating species.
     pub fn get_random_specimen(&self) -> &Organism {
         let mut rng = rand::thread_rng();
         let specimen_i = rng.gen_range(0..self.size);
         &self.population[specimen_i]
     }
 
-    // reproduction, 
-    // 
-    pub fn reproduce(&self, target_size: usize, mut innovation_tracker: InnovationTracker, max_innov: usize) -> ReproductionUpdates {        
+    /// Produces a number of new genomes by passing along elite genome and pulling random pairs of
+    /// high fitness individuals for sexual reproduction.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `target_size` - Size of the new population resulting from the reproduction within this
+    ///   species
+    /// * `innovation_tracker` - Holds information about the highest discovered innovation number
+    pub fn reproduce(&self, target_size: usize, mut innovation_tracker: InnovationTracker) -> ReproductionUpdates {        
 
         // determine who reproduces and who passes unchanged
         let mut reproducers = self.get_reproducers();
         let elites = self.get_elites(self.params.num_elites);
-        let mut new_population: Vec<Organism>;
+        let mut new_population: Vec<Organism> = Vec::new();
 
         // elites pass down directly with no mutation
         for elite_i in elites {
-            let new_elite = Organism::new(self.population[elite_i].genome);
+            let new_elite = Organism::new(self.population[elite_i].genome.clone());
             new_population.push(new_elite);
         }
         
@@ -90,12 +115,12 @@ impl Species {
             
             // we need a random pairing
             reproducers.shuffle(&mut rng);
-            let mom = self.population[reproducers[0]];
-            let dad = self.population[reproducers[1]];
+            let mom = self.population[reproducers[0]].clone();
+            let dad = self.population[reproducers[1]].clone();
             let parents = [&mom, &dad];
             
             // align genomes and crossover into new genome
-            let params = AlignmentParams { crossover_mode: self.params.crossover_mode };
+            let params = AlignmentParams { crossover_mode: self.params.crossover_mode.clone() };
             let mut crossed_genome = Alignment::crossover(mom.genome, dad.genome, &params);
             
             // mutate the new genomes
@@ -121,7 +146,8 @@ impl Species {
 
     }
 
-    // the elites dont mate they simply persist
+    /// Elites are the individuals with fitness high enough that their genomes pass directly down
+    /// to their descendants without recombination
     fn get_elites(&self, num_elites: usize) -> Vec<usize> {
 
         // get sorted indices
@@ -131,7 +157,8 @@ impl Species {
         fit_idx[0..self.params.num_elites].to_vec()
     }
 
-    // determine indices of reproducing organisms by sortinf by fitness and taking the top x%
+    /// Determine indices of reproducing organisms by sortinf by fitness and taking the fraction
+    /// described in the `mate_fraction` parameter.
     fn get_reproducers(&self) -> Vec<usize> {
 
         // sort population indices by fitness
@@ -145,7 +172,8 @@ impl Species {
         fit_idx[0..mate_number].to_vec()
     }
 
-    // get descending fitness-sorted population indices
+    /// Sort the Organisms in the species by fitness in descending order. Needed for getting elites
+    /// and reproducers
     fn sorted_pop_indices(&self) -> Vec<usize> {
         let mut indices: Vec<usize> = (0..self.size).collect();
 
@@ -159,9 +187,10 @@ impl Species {
     }
 
 
-    // calculates the raw fitness value that must be adjusted before doing any
-    // evolution with it
-    // should probably be broken up. e.g. spawn_fitness_thread() or spawn chunk_threads()
+    /// Calculates the raw fitness value for each Organism in the population. This is where the
+    /// heaviest computation occurs in evaluating the fitness function. We will adjust these values
+    /// before using them to make evolutionary comparisons. This function should probably be broken
+    /// up. e.g. spawn_fitness_thread() or spawn chunk_threads()
     fn calculate_raw_fitness(&self, ffunc: fn(&Organism) -> f64) -> Vec<f64> {
 
         // we're going to recieve indices and values from the child threads
@@ -235,7 +264,8 @@ impl Species {
         raw_fitness
     }
 
-    // returns the adjusted fitness values for each individual
+    /// This function returns the adjusted fitness values for each Organism. These are the values we
+    /// use to compare species.
     pub fn calculate_fitness(&self, ffunc: fn(&Organism) -> f64) -> Vec<f64> {
 
         let raw_fitness = self.calculate_raw_fitness(ffunc);
@@ -249,7 +279,9 @@ impl Species {
         adj_fitness
     }
 
-    // constructors
+    /// Default constructor but shouldn't be. We want our defualt constructor function signatures to
+    /// look right with no arguments. For now this takes an `id` value to label the species and
+    /// makes an empty Species 
     pub fn new(id: usize) -> Species {
         Species {
             id,
@@ -259,7 +291,7 @@ impl Species {
         }
     }
     
-    // used for testing
+    /// This function is used to make species for tests.
     pub fn _add_organism(&mut self, org: Organism) {
         self.population.push(org);
         self.size += 1;

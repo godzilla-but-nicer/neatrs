@@ -8,13 +8,16 @@ use rand::{prelude, Rng};
 use super::{innovation_tracker::InnovationTracker, genome::GenomeParams};
 
 
+/// Genomes in alignments are actually made up of Loci which keep track of both genes and lack of
+/// genes. Genes contain either Nodes or Edges.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Locus<T> {
+pub enum Locus<T: Clone> {
     Gene(T),
     Gap,
 }
 
-impl<T> Locus<T> {
+impl<T: Clone> Locus<T> {
+    /// returns true if the Locus is a Gap
     fn is_gap(&self) -> bool {
         match self {
             Locus::Gap => true,
@@ -22,34 +25,38 @@ impl<T> Locus<T> {
         }
     }
 
+    /// Returns the gene in a Gene locus or panics if called on a Gap
     fn get_gene(&self) -> T {
         match self {
-            Locus::Gene(x) => *x,
+            Locus::Gene(x) => x.clone(),
             Locus::Gap => panic!("Attempt to `get_gene()` on Locus::Gap"),
         }
     }
 }
 
-
+/// Return enum for many of the gene matching functions. Mismatch indicates one of the genomes is
+/// missing the focal gene
 #[derive(Clone, Debug, PartialEq)]
 pub enum PotentialMismatch {
     Match(f64), // float represents weight difference
     Mismatch,
 }
 
-// types for tracking parameters
-#[derive(Debug)]
+/// Allows simple pattern matching for pretty syntax when handling crossover
+#[derive(Debug, Clone)]
 pub enum CrossoverMode {
     Alternating,
     SimpleRandom,
 }
 
+/// This struct simply holds any relevant parameters for alignment related stuff
 #[derive(Debug)]
 pub struct AlignmentParams {
-    crossover_mode: CrossoverMode,
+    pub crossover_mode: CrossoverMode,
 }
 
-
+/// Provides named fields for the incompatability numbers so we don't get confused elsewhere.
+/// Weighing and summing these values occurs in Species
 #[derive(Clone, Debug)]
 pub struct IncompatabilityComponents {
     pub base_disjoint: f64,
@@ -57,13 +64,31 @@ pub struct IncompatabilityComponents {
     pub base_weight_diff: f64,
 }
 
-
+/// Tracks important nodes whose identities do not change
 #[derive(Clone, Debug)]
 struct GenomeStructure {
     sensor_innovs: Vec<usize>,
     output_innovs: Vec<usize>,
 }
 
+/// This module handles all of the logic associated with comparing genomes gene-for gene. This need
+/// arrises in at least two different places. First, for comparing the similarity of genomes for
+/// assigning species groupings. Second, for creating new genomes through the recombination of two
+/// parent genomes.
+/// 
+/// This object holds sorted vectors of Loci in innovation number order with Gaps inserted such an
+/// index refers to the same innovation number or gap for each genome. These vectors for both Nodes
+/// and Edges are the core data held by Alignments.
+/// 
+/// # Attributes
+/// 
+/// * `edgeomes` - Vec<Vec<Locus<Edge>>> - (2, $L$) 
+/// ** Alignment of edge Loci from both genomes in innovation number order with gaps filling Loci 
+/// where genes are missing
+/// 
+/// * `nodeomes` - Vec<Vec<Locus<Node>>> - (2, $N$)
+/// ** Alignment of node Loci from both genomes in innovation number order with gaps filling Loci 
+/// where genes are missing
 #[derive(Clone, Debug)]
 pub struct Alignment<'a> {
     // actual objects upon which recombination acts
@@ -85,7 +110,8 @@ pub struct Alignment<'a> {
 }
 
 impl <'a> Alignment<'a> {
-    pub fn from_parents(p0: &Genome, p1: &Genome, params: &AlignmentParams) -> Alignment<'a> {
+    /// The primary constructor for Alignments takes two genomes representing the parents
+    pub fn from_parents(p0: &Genome, p1: &Genome, params: &'a AlignmentParams) -> Alignment<'a> {
         // alignment vectors of the two genomes
         let mut p0_innovs = Vec::new();
         let mut p1_innovs = Vec::new();
@@ -140,8 +166,8 @@ impl <'a> Alignment<'a> {
 
         // pull out indices we need to care about
         let structure = GenomeStructure {
-            sensor_innovs: p0.sensor_innovs,
-            output_innovs: p0.output_innovs 
+            sensor_innovs: p0.sensor_innovs.clone(),
+            output_innovs: p0.output_innovs.clone() 
         };
 
         Alignment {
@@ -155,7 +181,22 @@ impl <'a> Alignment<'a> {
         }
     }
 
-    pub fn raw_incompatibility(p0: &Genome, p1: &Genome, params: &AlignmentParams) -> IncompatabilityComponents {
+    /// This calculates the incompatibility components in the edges number of excess genes---genes
+    /// in one genome with higher innovation numbers than contained in the partner genome, disjoint
+    /// genes---where only one genome contains a particular innovation numbered gene but not due to
+    /// simply "more evolution" in that genome, and weight differences---the average difference in
+    /// weights for genes contained in both genomes.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `p0` - The first parent's genome
+    /// * `p1` - The second parent's genome
+    /// * `params` - Parameters needed for alignment construction
+    /// 
+    /// # Returns
+    /// 
+    /// * struct of base incompatibility components
+    pub fn raw_incompatibility(p0: &Genome, p1: &Genome, params: &'a AlignmentParams) -> IncompatabilityComponents {
         // align to count disjoint and excess genes
         let alignment = Self::from_parents(&p0, &p1, params);
 
@@ -188,9 +229,11 @@ impl <'a> Alignment<'a> {
         }
     }
 
+    /// Helper function for counting incompatibility components by checking whether a locus is a
+    /// match or not.
     fn check_mismatch(&self, locus: usize) -> PotentialMismatch {
-        let p0_weight;
-        let p1_weight;
+        let mut p0_weight = 0.;
+        let mut p1_weight = 0.;
 
         let p0_missing = match &self.edgeomes[0][locus] {
             Locus::Gap => true,
@@ -208,14 +251,14 @@ impl <'a> Alignment<'a> {
             }
         };
 
-        if p0_missing ^ p1_missing {
+        if p0_missing | p1_missing {
             PotentialMismatch::Mismatch
         } else {
             PotentialMismatch::Match((p0_weight - p1_weight).abs())
         }
     }
 
-
+    /// Helper function for identifying a Locus for which neither edgeome has a Gene
     fn edgeome_double_gap(&self, locus: usize) -> bool {
 
         if self.edgeomes[0][locus].is_gap() & self.edgeomes[1][locus].is_gap() {
@@ -226,6 +269,7 @@ impl <'a> Alignment<'a> {
     
     }
 
+    /// Boolean for whether a gene is found only in the first parent's edgeome
     fn edgeome_p0_only(&self, locus: usize) -> bool {
 
         if !self.edgeomes[0][locus].is_gap() & self.edgeomes[1][locus].is_gap() {
@@ -236,6 +280,7 @@ impl <'a> Alignment<'a> {
 
     }
 
+    /// Boolean for whether a gene is found only in the second parent's edgeome
     fn edgeome_p1_only(&self, locus: usize) -> bool {
         
         if self.edgeomes[0][locus].is_gap() & !self.edgeomes[1][locus].is_gap() {
@@ -246,6 +291,7 @@ impl <'a> Alignment<'a> {
     
     }
     
+    /// Boolean for whether a gene is found only in the first parent's nodeome
     fn nodeome_p0_only(&self, locus: usize) -> bool {
 
         if !self.nodeomes[0][locus].is_gap() & self.nodeomes[1][locus].is_gap() {
@@ -256,6 +302,7 @@ impl <'a> Alignment<'a> {
 
     }
 
+    /// Boolean for whether a gene is found only in the second parent's nodeome
     fn nodeome_p1_only(&self, locus: usize) -> bool {
         
         if self.nodeomes[0][locus].is_gap() & !self.nodeomes[1][locus].is_gap() {
@@ -265,7 +312,7 @@ impl <'a> Alignment<'a> {
         }
     }
 
-    // returns the edge genes of a parent in order and with gaps
+    /// Order's the Loci of a parent's edgeome by innovation number and inserts Gaps where needed
     fn order_edges(parent: &Genome, innov_num: usize) -> Vec<Locus<Edge>> {
         let mut par_edgeome: Vec<Locus<Edge>> = Vec::new();
 
@@ -282,7 +329,7 @@ impl <'a> Alignment<'a> {
         par_edgeome
     }
 
-    // returns node genes in order and with gaps
+    /// Order's the Loci of a parent's edgeome by innovation number and inserts Gaps where needed
     fn order_nodes(parent: &Genome, innov_num: usize) -> Vec<Locus<Node>> {
         let mut par_nodeome: Vec<Locus<Node>> = Vec::new();
 
@@ -299,7 +346,7 @@ impl <'a> Alignment<'a> {
         par_nodeome
     }
 
-    // calls the correct crossover function
+    /// Reads the alignment parameters to call the correct crossover method
     pub fn crossover(p0: Genome, p1: Genome, params: &AlignmentParams) -> Genome {
 
         let alignment = Alignment::from_parents(&p0, &p1, params);
@@ -312,7 +359,9 @@ impl <'a> Alignment<'a> {
         new_genome
     }
 
-    // specific crossover functions go here
+    /// This crossover function simply takes the first gene from the first parent, the second from
+    /// the second, the third from the first, and so on for both nodes and edges to construct a new
+    /// genome. If only one parent has a Gene for a given Locus the child gets that gene.
     fn alternating_crossover(&self) -> Genome {
         
         let mut new_nodes: Vec<Node> = Vec::new();
@@ -373,11 +422,14 @@ impl <'a> Alignment<'a> {
         }
         
         Genome::new(new_nodes, new_edges, 
-                    self.structure.sensor_innovs, 
-                    self.structure.output_innovs)
+                    self.structure.sensor_innovs.clone(), 
+                    self.structure.output_innovs.clone())
 
     }
 
+    /// This crossover function constructs a child Genome by randomly selecting a parent for each
+    /// gene unless only one parent has a gene for the Locus of interest. If only one parent has a
+    /// Gene at a given Locus, the child inherits that gene. 
     fn simple_random_crossover(&self) -> Genome {
 
         let mut rng = rand::thread_rng();
@@ -414,8 +466,8 @@ impl <'a> Alignment<'a> {
         }
 
         Genome::new(new_nodes, new_edges,
-                self.structure.sensor_innovs,
-                self.structure.output_innovs)
+                self.structure.sensor_innovs.clone(),
+                self.structure.output_innovs.clone())
     }
 }
 
@@ -447,8 +499,8 @@ mod tests {
         let known_2_edge_idx: Vec<i32> = vec![0, 1, 2, 3, 4, 5, -1, 7, 8, 9, 10, -1, 12, 13, 14];
 
         // declare our knowns
-        let mut edges_1: Vec<Locus<Edge>>;
-        let mut edges_2: Vec<Locus<Edge>>;
+        let mut edges_1: Vec<Locus<Edge>> = Vec::new();
+        let mut edges_2: Vec<Locus<Edge>> = Vec::new();
 
         for i in 0..known_1_edge_idx.len() {
             if known_1_edge_idx[i] >= 0 {
@@ -468,9 +520,9 @@ mod tests {
 
         let known_1_node_idx: Vec<i32> = vec![0, 1, 2, 3, 4, 5, 6, -1];
         let known_2_node_idx: Vec<i32> = vec![0, 1, 2, 3, 4, 5, 6, 7];
-
-        let mut nodes_1: Vec<Locus<Node>>;
-        let mut nodes_2: Vec<Locus<Node>>;
+        
+        let mut nodes_1: Vec<Locus<Node>> = Vec::new();
+        let mut nodes_2: Vec<Locus<Node>> = Vec::new();
         for i in 0..known_1_node_idx.len() {
             if known_1_node_idx[i] >= 0 {
                 let gene = Locus::Gene(Node::new(known_1_node_idx[i] as usize, 0., |x| x));

@@ -1,6 +1,8 @@
 mod neural_network;
 mod community;
 
+// #![warn(missing_docs)]
+
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }

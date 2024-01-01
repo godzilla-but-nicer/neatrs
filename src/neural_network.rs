@@ -9,35 +9,67 @@ use crate::neural_network::graph::Graph;
 
 use std::collections::HashMap;
 
-
-struct NeuralNetwork<'a> {
+/// This struct contains all of the information and implementations to convert sensor values into
+/// control outputs through an evolved potentially recurrant neural network.
+/// 
+/// # Attributes
+/// 
+/// * `nodes` - Vector of Node objects consisting of all nodes in the network
+/// 
+/// * `edges` - Vector of Edge objects consisting of all edges in the network
+/// 
+/// * `sensor_idx` - Vector of integers identifying the indices of `NeuralNetwork.nodes` that
+/// are sensor nodes
+/// 
+/// * `output_idx` - Vector of integers identifying the indices of `NeuralNetwork.edges` that
+/// are output nodes
+/// 
+/// * `activation_order` - Vector of integers corresponding to node integers that describe an
+/// ordering of nodes that ensures each node is ready to activate when visited
+/// 
+/// * `topology` - Graph object that can provide topological descriptions and functionality in
+/// future versions
+/// 
+/// * `node_map` - HashSet that allows various methods to convert Node innovation numbers to
+/// indices in NeuralNetwork.nodes. This is useful for compatability with other modules.
+struct NeuralNetwork {
     nodes: Vec<Node>,
     edges: Vec<Edge>,
     sensor_idx: Vec<usize>,
     output_idx: Vec<usize>,
     activation_order: Vec<usize>,
-    topology: Graph<'a>,
+    topology: Graph,
     node_map: HashMap<usize, usize>,  // this map innovation numbers to indices
 }
 
-impl <'a> NeuralNetwork<'a> {
+impl NeuralNetwork {
 
-    // convert sensor values to outputs
-    // all we have to do is iterate over the activation order and activate each node
-    fn propagate(&mut self, input: Vec<f64>) -> Vec<f64> {
+    /// Convert inputs to outputs by propagating a signal through the network
+    /// 
+    /// # Arguments
+    /// 
+    /// * `input` - Vec<f64>
+    /// ** Input values containing the values observed by each of the sensor nodes in an order
+    /// corresponding to `self.sensor_idx`
+    pub fn propagate(&mut self, input: Vec<f64>) -> Vec<f64> {
 
         self.load_sensors(input);
 
-        for node_i in self.activation_order {
-            self.activate_node(node_i)
+        // can we avoid this clone? it avoids double-borrowing when we call activate node
+        for node_innov in &self.activation_order.clone() {
+            let nidx = self.node_map[node_innov];
+            self.activate_node(&nidx)
         }
 
         self.get_output()
     }
 
     
-    // calculate net input and activate a node
-    fn activate_node(&mut self, node_i: usize) {
+    /// Activation of a single Node by combinging incoming signals fro other active nodes
+    fn activate_node(&mut self, node_innov: &usize) {
+        // convert the innovation number to an index
+        let node_i = self.node_map[node_innov];
+
         // init input with bias instead of adding later
         let mut net_input = self.nodes[node_i].bias;
 
@@ -53,15 +85,16 @@ impl <'a> NeuralNetwork<'a> {
     }
 
 
-    // activates the sensor nodes by setting the output to their observed value
+    /// Activation the sensor nodes by setting the output to their observed values
     fn load_sensors(&mut self, values: Vec<f64>) {
         for (val_i, sensor_j) in self.sensor_idx.iter().enumerate() {
             self.nodes[*sensor_j].output = values[val_i];
         }
     }
 
-    // construct network from genome. primary constructor
-    fn from_genome(genome: &Genome) -> NeuralNetwork {
+    /// construct network from genome. This is the constructor used throughout the library to make
+    /// useful evolved NeuralNetworks.
+    pub fn from_genome(genome: &Genome) -> NeuralNetwork {
 
         // make owned copies of objects
         let mut nodes = genome.node_genes.clone();
@@ -87,15 +120,15 @@ impl <'a> NeuralNetwork<'a> {
         }
 
         let mut sensor_idx = Vec::new();        
-        for sinnov in genome.sensor_innovs {
-            let sidx = genome.node_index_from_innov(sinnov).unwrap();
+        for sinnov in &genome.sensor_innovs {
+            let sidx = genome.node_index_from_innov(*sinnov).unwrap();
             sensor_idx.push(sidx);
         }
 
         let mut output_idx = Vec::new();
-        for oinnov in genome.output_innovs {
-            let oidx = genome.node_index_from_innov(oinnov);
-            output_idx.push(oinnov);
+        for oinnov in &genome.output_innovs {
+            let oidx = genome.node_index_from_innov(*oinnov);
+            output_idx.push(oidx);
         }
 
         let mut nn = NeuralNetwork {
@@ -104,16 +137,16 @@ impl <'a> NeuralNetwork<'a> {
             sensor_idx: genome.sensor_innovs.clone(),
             output_idx: genome.output_innovs.clone(),
             activation_order: Vec::new(),
-            topology: Graph::new(&sensor_idx, &output_idx),
+            topology: Graph::new(genome.sensor_innovs.clone(), genome.output_innovs.clone()),
             node_map: node_map
         };
 
         let edge_list = nn.to_edge_list();
-        let topology = Graph::from_edge_list(edge_list, &nn.sensor_idx, &nn.output_idx);
+        let topology = Graph::from_edge_list(edge_list, genome.sensor_innovs.clone(), genome.output_innovs.clone());
 
-        let ao = match topology.topological_sort_idx() {
+        let ao = match topology.topological_sort() {
             Ok(order) => order,
-            Err(_) => match topology.recurrent_pseudosort_idx() {
+            Err(_) => match topology.recurrent_pseudosort() {
                 Ok(order) => order,
                 Err(e) => panic!("Failed to determine activation order! {}", e),
             },
@@ -125,23 +158,24 @@ impl <'a> NeuralNetwork<'a> {
         nn
     }
 
-    // read the values of the output nodes only
-    fn get_output(&self) -> Vec<f64> {
+    /// Read the values of the output nodes following signal propagation in the order described by
+    /// `self.output_idx`.
+    pub fn get_output(&self) -> Vec<f64> {
 
         let mut output = Vec::with_capacity(self.output_idx.len());
 
-        for output_i in self.output_idx {
-            output.push(self.nodes[output_i].output);
+        for output_i in &self.output_idx {
+            output.push(self.nodes[*output_i].output);
         }
 
         output.to_owned()
     }
 
-    // returns an edge_list for the graph
+    // Converts the network into an edge list for building Graph objects.
     fn to_edge_list(&self) -> Vec<[usize; 2]> {
-        let mut edges: Vec<[usize; 2]>;
+        let mut edges: Vec<[usize; 2]> = Vec::new();
 
-        for edge in self.edges {
+        for edge in &self.edges {
             edges.push([self.node_map[&edge.source_innov], self.node_map[&edge.target_innov]]);
         }
         edges
@@ -156,7 +190,6 @@ mod tests {
     #[fixture]
     fn singly_recurrant_genome() -> Genome {
         let mut new_nodes = Vec::new();
-        let node_bias = 1.0;
 
         for node_i in 0..=5 {
             new_nodes.push(Node::new(node_i, node_i as f64, |x| x));

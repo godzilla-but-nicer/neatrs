@@ -6,21 +6,30 @@ use crate::neural_network::node::Node;
 use rand::prelude::*;
 use rand_distr::Normal;
 
-// little reporters to keep track of innovation numbers following mutation
+/// Returned object by main mutation function containing all of the information needed to update
+/// genomes and to keep track of new innovations.
 pub enum MutationInfo {
     Quantitative(Genome),
     Topological((Genome, NewInnovs)),
 }
 
+/// This struct is used to keep track of new innovations added by small structural mutations.
+/// 
+/// # Attributes
+/// 
+/// * `nodes_added` - Number of new node innovations
+/// * `edges_added` - Number of new edge innovations
 pub struct NewInnovs {
     pub nodes_added: usize,
     pub edges_added: usize,
 }
 
-// main mutation function that calls the other mutation functions
-// returns the number of new innovation numbers
+/// The main mutation function that calls the other mutation functions. Whether a mutation is
+/// structural or not is currently determined elsewhere and this function determines what kind of
+/// structural mutation will occur or adjusts weights if the mutation is not structural
+/// and returns a MutationInfo enum containing a new genome and information about new innovation
+/// numbers where applicable.
 pub fn mutate(genome: Genome, tracker: &InnovationTracker, structural: bool) -> MutationInfo {
-    let new_innovs: usize;
     let mut rng = rand::thread_rng();
 
     // we do either a single random structural mutation or all weight mutations
@@ -30,7 +39,7 @@ pub fn mutate(genome: Genome, tracker: &InnovationTracker, structural: bool) -> 
         if roll < genome.params.insert_prob {
             let mutate_i = (0..genome.edge_genes.len()).choose(&mut rng).unwrap();
 
-            let new_genome = insert_node(genome, genome.edge_genes[mutate_i].innov, tracker);
+            let new_genome = insert_node(&genome, &genome.edge_genes[mutate_i].innov, tracker);
             let innovations = NewInnovs {
                 nodes_added: 1,
                 edges_added: 2,
@@ -74,7 +83,7 @@ pub fn mutate(genome: Genome, tracker: &InnovationTracker, structural: bool) -> 
         // otherwise toggle a random edge
         } else {
             let toggle_i = (0..genome.edge_genes.len()).choose(&mut rng).unwrap();
-            let new_genome = enable_disable(genome, genome.edge_genes[toggle_i].innov);
+            let new_genome = enable_disable(&genome, &genome.edge_genes[toggle_i].innov);
             let innovations = NewInnovs {
                 nodes_added: 0,
                 edges_added: 0,
@@ -85,12 +94,12 @@ pub fn mutate(genome: Genome, tracker: &InnovationTracker, structural: bool) -> 
     // if we're not doing a structural mutation we fiddle with weights
     } else {
         let updated_genome = mutate_weights(genome);
-        let new_genome = mutate_bias(genome);
+        let new_genome = mutate_bias(updated_genome);
         return MutationInfo::Quantitative(new_genome);
     }
 }
 
-// we'll start simple. perturb all weights
+/// Adjusts all edge weights in a genome by a standard normal ammount
 fn mutate_weights(genome: Genome) -> Genome {
     let normal = Normal::new(0., genome.params.weight_mut_sd).unwrap();
     let mut new_genome = genome.clone();
@@ -101,7 +110,7 @@ fn mutate_weights(genome: Genome) -> Genome {
     new_genome
 }
 
-// perturb node biases
+/// Adjusts all node biases by a standard normal ammount
 fn mutate_bias(genome: Genome) -> Genome {
     let normal = Normal::new(0., genome.params.bias_mut_sd).unwrap();
     let mut new_genome = genome.clone();
@@ -112,19 +121,19 @@ fn mutate_bias(genome: Genome) -> Genome {
     new_genome
 }
 
-// disable an edge gene
-fn enable_disable(genome: Genome, innov: usize) -> Genome {
-    let iidx = genome.edge_index_from_innov(innov).unwrap();
+/// Disable an active edge or enable an inactive edge in a reversable way
+fn enable_disable(genome: &Genome, innov: &usize) -> Genome {
+    let iidx = genome.edge_index_from_innov(*innov).unwrap();
     let mut new_genome = genome.clone();
     new_genome.edge_genes[iidx].enabled = !genome.edge_genes[iidx].enabled;
 
     new_genome
 }
 
-// add node "on" an existing edge
-fn insert_node(genome: Genome, edge_innov: usize, tracker: &InnovationTracker) -> Genome {
+/// Adds a node to the network by splitting an edge in two with the new node sitting in the middle
+fn insert_node(genome: &Genome, edge_innov: &usize, tracker: &InnovationTracker) -> Genome {
     // identify ends of new edges
-    let iidx = genome.edge_index_from_innov(edge_innov).unwrap();
+    let iidx = genome.edge_index_from_innov(*edge_innov).unwrap();
     let old_source = genome.edge_genes[iidx].source_innov;
     let old_target = genome.edge_genes[iidx].target_innov;
     let mut new_genome = genome.clone();
@@ -156,7 +165,7 @@ fn insert_node(genome: Genome, edge_innov: usize, tracker: &InnovationTracker) -
     new_genome
 }
 
-// add a new edge gene.
+/// Adds a new active edge between two existing nodes
 fn add_connection(
     genome: Genome,
     source_i: usize,
@@ -198,7 +207,7 @@ mod tests {
 
     #[rstest]
     fn test_insert_node(three_by_four: Genome, three_by_four_tracker: InnovationTracker) {
-        let mutated = insert_node(three_by_four, 5, &three_by_four_tracker);
+        let mutated = insert_node(&three_by_four, &5, &three_by_four_tracker);
         assert!(mutated.node_genes.len() == 8);
         assert!(mutated.edge_genes.len() == 13);
         assert!(mutated.edge_genes[11].source_innov == 1);
@@ -209,8 +218,9 @@ mod tests {
 
     #[rstest]
     fn test_add_connection(three_by_four: Genome, three_by_four_tracker: InnovationTracker) {
-        three_by_four._remove_by_innovation(5);
-        let mutated = add_connection(three_by_four, 1, 4, &three_by_four_tracker);
+        let mut gen = three_by_four.clone();  // this needed to use fixture syntax
+        gen._remove_by_innovation(5);
+        let mutated = add_connection(gen, 1, 4, &three_by_four_tracker);
 
         let new_edge = three_by_four.edge_genes.last().unwrap().clone();
 

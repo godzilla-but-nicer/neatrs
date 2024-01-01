@@ -1,3 +1,5 @@
+/// The edge struct is one of the basic units of organization for neural networks. Here we
+/// store all of the relevant information needed to calculate node and network activations.
 #[derive(Clone)]
 #[derive(PartialEq)]
 #[derive(Debug)]
@@ -10,6 +12,7 @@ pub struct Edge {
 }
 
 impl Edge {
+    /// Basic constructor for edges. Requires all information and defaults to enabled state.
     pub fn new(innov: usize, source_innov: usize, target_innov: usize, weight: f64) -> Edge {
         Edge {
             innov,

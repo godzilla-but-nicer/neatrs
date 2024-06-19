@@ -14,3 +14,6 @@ Cargo.lock
 
 /target
 /Cargo.lock
+
+# vscode/workflow stuff
+.vscode/

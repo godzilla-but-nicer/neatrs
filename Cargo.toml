@@ -7,4 +7,10 @@ edition = "2021"
 
 [dependencies]
 rand = "0.8.5"
+rand_distr = "0.4.3"
 crossbeam = "0.8.2"
+topo_sort = "0.4"
+rstest = "0.17.0"
+
+[build]
+profiler = true

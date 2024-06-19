@@ -1,234 +1,264 @@
 pub mod edge;
 pub mod node;
+mod graph;
 
-use crate::neural_network::node::{Node, NodeKind};
-use crate::neural_network::edge::Edge;
 use crate::community::genome::Genome;
+use crate::neural_network::edge::Edge;
+use crate::neural_network::node::Node;
+use crate::neural_network::graph::Graph;
 
+use std::collections::HashMap;
+
+/// This struct contains all of the information and implementations to convert sensor values into
+/// control outputs through an evolved potentially recurrant neural network.
+/// 
+/// In terms of NEAT itself, NeuralNetwork objects will be used within fitness evaluation. A 
+/// fitness function will likely convert Genomes into NeuralNetworks in a simulated envioronment to
+/// test evolving agent controls. NeuralNetwork objects can also be used following evolution to
+/// provide behavior to evolved agents.
+/// 
+/// The main interactions users will have with these objects then is in their creation with the
+/// constructor `NeuralNetwork::from_genome()`and conversion of sensor readings into control 
+/// outputs with the method `nn.propogate()`.
 struct NeuralNetwork {
     nodes: Vec<Node>,
     edges: Vec<Edge>,
     sensor_idx: Vec<usize>,
     output_idx: Vec<usize>,
-    max_depth: usize
+    activation_order: Vec<usize>,
+    topology: Graph,
+    node_map: HashMap<usize, usize>,  // this map innovation numbers to indices
 }
 
 impl NeuralNetwork {
 
-    // convert sensor values to outputs
-    // because we cant guarentee the order of the nodes in the vec, we must
-    // iterate until outputs are active. with each iteration the activation
-    // depth grows by one layer.
-    fn propagate(&mut self) {
+    /// Convert inputs to outputs by propagating a signal through the network
+    /// 
+    /// # Arguments
+    /// 
+    /// * `input` - Vec<f64>
+    /// ** Input values containing the values observed by each of the sensor nodes in an order
+    /// corresponding to `self.sensor_idx`
+    pub fn propagate(&mut self, input: Vec<f64>) -> Vec<f64> {
 
-        // iterated in outer loop. panics when > max_depth
-        let mut layer_count: usize = 0;
+        self.load_sensors(input);
 
-        // outer iteration which we continue until outputs are activated
-        while self.outputs_inactive() {
-
-            // iteration over all nodes to perform activations
-            for node_i in 0..self.nodes.len() {
-
-                // never need to activate sensors
-                if self.nodes[node_i].kind != NodeKind::Sensor {
-
-                    // if the node's inputs are active we activate
-                    if self.node_ready(node_i) {
-                        self.activate_node(node_i);
-                    }
-                }
-            }
-
-            // add 1 to the depth of activation
-            layer_count += 1;
-            if layer_count > self.max_depth {
-                panic!("Max depth exceeded!!");
-            }
+        // can we avoid this clone? it avoids double-borrowing when we call activate node
+        for node_innov in &self.activation_order.clone() {
+            let nidx = self.node_map[node_innov];
+            self.activate_node(&nidx)
         }
+
+        self.get_output()
     }
 
-    // check if a node is ready to be activated
-    fn node_ready(&self, node_i: usize) -> bool {
-        for edge_i in &self.nodes[node_i].in_edges {
-
-            // locate the focal input
-            let edge = &self.edges[*edge_i];
-            let source_node = &self.nodes[edge.source_i];
-            
-            if !source_node.active {
-                return false
-            }
-        }
-        // no input is inactive
-        return true
-    }
-
-    // calculate net input and activate a node
-    fn activate_node(&mut self, node_i: usize) {
+    
+    /// Activation of a single Node by combinging incoming signals fro other active nodes
+    fn activate_node(&mut self, node_innov: &usize) {
+        // convert the innovation number to an index
+        let node_i = self.node_map[node_innov];
 
         // init input with bias instead of adding later
         let mut net_input = self.nodes[node_i].bias;
 
         for edge_i in &self.nodes[node_i].in_edges {
-            
             // locate the focal input
             let edge = &self.edges[*edge_i];
-            let source = &self.nodes[edge.source_i];
+            let source_i = self.node_map[&edge.source_innov];
+            let source = &self.nodes[source_i];
 
             net_input += source.output * edge.weight;
         }
         self.nodes[node_i].output = (self.nodes[node_i].activation)(net_input);
-        self.nodes[node_i].active = true
     }
 
-    // checks whether all outputs are engaged
-    fn outputs_inactive(&self) -> bool{
-        for output_i in &self.output_idx {
-            if !self.nodes[*output_i].active {
-                return true
-            }
-        }
-        return false
-    }
-    
-    // return the values sent out from the output nodes
-    // panics if called on inactive outputs
-    fn get_outputs(&self) -> Vec<f64> {
 
-        let mut output_vec = Vec::<f64>::with_capacity(self.output_idx.len());
-        for output_i in &self.output_idx {
-
-            if self.nodes[*output_i].active {
-                output_vec.push(self.nodes[*output_i].output);
-            } else {
-                panic!("Outputs retrieved before activation!");
-            }
-        }
-        output_vec
-    }
-
-    // activates the sensor nodes by setting the output to their observed value
+    /// Activation the sensor nodes by setting the output to their observed values
     fn load_sensors(&mut self, values: Vec<f64>) {
         for (val_i, sensor_j) in self.sensor_idx.iter().enumerate() {
             self.nodes[*sensor_j].output = values[val_i];
-            self.nodes[*sensor_j].active = true;
         }
     }
 
-    // construct network from genome. primary constructor
-    fn from_genome(genome: &Genome) -> NeuralNetwork {
+    /// construct network from genome. This is the constructor used throughout the library to make
+    /// useful evolved NeuralNetworks.
+    pub fn from_genome(genome: &Genome) -> NeuralNetwork {
 
         // make owned copies of objects
         let mut nodes = genome.node_genes.clone();
+        let mut node_map: HashMap<usize, usize> = HashMap::new();
+
         let edges = genome.edge_genes.clone();
 
-        // populate in edge indices for each node
+
+        // populate in edge indices for each node along with the node map
         for node_i in 0..nodes.len() {
+
+            node_map.insert(nodes[node_i].innov, node_i);
+            
             for edge_i in 0..edges.len() {
-                if node_i == edges[edge_i].target_i {
+                if nodes[node_i].innov == edges[edge_i].target_innov {
                     nodes[node_i].in_edges.push(edge_i);
+                }
+
+                if nodes[node_i].innov == edges[edge_i].source_innov {
+                    nodes[node_i].out_edges.push(edge_i)
                 }
             }
         }
 
-        NeuralNetwork {
-            nodes,
-            edges,
-            sensor_idx: genome.sensor_idx.clone(),
-            output_idx: genome.output_idx.clone(),
-            max_depth: 20,
+        let mut sensor_idx = Vec::new();        
+        for sinnov in &genome.sensor_innovs {
+            let sidx = genome.node_index_from_innov(*sinnov).unwrap();
+            sensor_idx.push(sidx);
         }
 
+        let mut output_idx = Vec::new();
+        for oinnov in &genome.output_innovs {
+            let oidx = genome.node_index_from_innov(*oinnov);
+            output_idx.push(oidx);
+        }
+
+        let mut nn = NeuralNetwork {
+            nodes,
+            edges,
+            sensor_idx: genome.sensor_innovs.clone(),
+            output_idx: genome.output_innovs.clone(),
+            activation_order: Vec::new(),
+            topology: Graph::new(),
+            node_map: node_map
+        };
+
+        let edge_list = nn.to_edge_list();
+        let topology = Graph::from_edge_list(edge_list, genome.sensor_innovs.clone(), genome.output_innovs.clone());
+
+        let ao = match topology.topological_sort() {
+            Ok(order) => order,
+            Err(_) => match topology.recurrent_pseudosort() {
+                Ok(order) => order,
+                Err(e) => panic!("Failed to determine activation order! {}", e),
+            },
+        };
+
+        nn.topology = topology;
+        nn.activation_order = ao;
+
+        nn
+    }
+
+    /// Read the values of the output nodes following signal propagation in the order described by
+    /// `self.output_idx`.
+    pub fn get_output(&self) -> Vec<f64> {
+
+        let mut output = Vec::with_capacity(self.output_idx.len());
+
+        for output_i in &self.output_idx {
+            output.push(self.nodes[*output_i].output);
+        }
+
+        output.to_owned()
+    }
+
+    // Converts the network into an edge list for building Graph objects.
+    fn to_edge_list(&self) -> Vec<[usize; 2]> {
+        let mut edges: Vec<[usize; 2]> = Vec::new();
+
+        for edge in &self.edges {
+            edges.push([self.node_map[&edge.source_innov], self.node_map[&edge.target_innov]]);
+        }
+        edges
     }
 }
 
 #[cfg(test)]
-mod test_neural_network {
+mod tests {
     use super::*;
-    use crate::community::genome::Genome;
+    use rstest::{fixture, rstest};
 
-    #[test]
-    fn test_from_genome() {
+    #[fixture]
+    fn singly_recurrant_genome() -> Genome {
+        let mut new_nodes = Vec::new();
+
+        for node_i in 0..=5 {
+            new_nodes.push(Node::new(node_i, node_i as f64, |x| x));
+        }
+
+        let mut new_edges = Vec::new();
+        let edge_weight = 2.0;
+        new_edges.push(Edge::new(0, 0, 2, edge_weight));
+        new_edges.push(Edge::new(1, 1, 3, edge_weight));
+        new_edges.push(Edge::new(2, 3, 2, edge_weight));
+        new_edges.push(Edge::new(3, 3, 4, edge_weight));
+        new_edges.push(Edge::new(4, 2, 5, edge_weight));
+        new_edges.push(Edge::new(5, 4, 3, edge_weight));
+        new_edges.push(Edge::new(6, 4, 5, edge_weight));
+
+        let sensor_innovs = vec![0, 1];
+        let output_innovs = vec![5];
+
+        Genome::new(new_nodes, new_edges, sensor_innovs, output_innovs)
+    }
+
+    #[rstest]
+    fn test_from_genome(singly_recurrant_genome: Genome) {
         // init the network from a genome
-        let gen = Genome::new_minimal_dense(3, 4);
-        let nn = NeuralNetwork::from_genome(&gen); 
+        let nn = NeuralNetwork::from_genome(&singly_recurrant_genome);
 
         // debug
         for edge_i in 0..nn.edges.len() {
-            println!("idx: {}, source: {}, weight: {}, target: {}", edge_i, 
-                                                    nn.edges[edge_i].source_i,
-                                                    nn.edges[edge_i].weight, 
-                                                    nn.edges[edge_i].target_i);
+            println!(
+                "idx: {}, source: {}, weight: {}, target: {}",
+                edge_i,
+                nn.edges[edge_i].source_innov,
+                nn.edges[edge_i].weight,
+                nn.edges[edge_i].target_innov
+            );
         }
 
         for node_i in 0..nn.nodes.len() {
-            println!("idx: {}, output: {}, kind: {:?}, in_edges: {:?}", node_i, 
-                                                        nn.nodes[node_i].output,
-                                                        nn.nodes[node_i].kind,
-                                                        nn.nodes[node_i].in_edges)
+            println!(
+                "idx: {}, innov: {}, in_edges: {:?}",
+                node_i, nn.nodes[node_i].innov, nn.nodes[node_i].in_edges
+            )
         }
 
-        assert!(nn.edges[5].source_i == 1);
-        assert!(nn.nodes[6].in_edges[2] == 11)
+        assert!(nn.edges[3].source_innov == 3);
+        assert!(nn.nodes[2].in_edges[1] == 2);
+        assert!(nn.sensor_idx[1] == 1)
     }
 
-    #[test]
-    fn test_node_ready() {
-        let gen = Genome::new_minimal_dense(3, 2);
-        let mut nn = NeuralNetwork::from_genome(&gen);
-        nn.nodes[0].active = true;
-        nn.nodes[1].active = true;
-        nn.nodes[2].active = true;
-        assert!(nn.node_ready(4))
-    }
 
-    #[test]
-    fn test_propagate() {
-        let gen = Genome::new_minimal_dense(3, 2);
-        let mut nn = NeuralNetwork::from_genome(&gen);
+    #[rstest]
+    fn test_propagate(singly_recurrant_genome: Genome) {
+        let mut nn = NeuralNetwork::from_genome(&singly_recurrant_genome);
 
-        // set weights to something easy
+        // set biass to something easy
         for i in 0..nn.edges.len() {
-            nn.edges[i].weight = i as f64;
+            nn.nodes[i].bias = i as f64;
         }
 
-        nn.nodes[3].bias = 2.0;
-        nn.nodes[4].bias = 1.0;
-        
+        // set a couple of edges to something different
+        nn.edges[2].weight = 2.0;
+        nn.edges[4].weight = 3.0;
+
         // same for the sensors
-        nn.load_sensors(vec![-1., 0., 1.]);
-        nn.propagate();
-        
+        let output = nn.propagate(vec![-1., 1.]);
+
         // debug
         for edge in &nn.edges {
-            println!("source: {}, weight: {}, target: {}", edge.source_i, edge.weight, edge.target_i);
+            println!(
+                "source: {}, weight: {}, target: {}",
+                edge.source_innov, edge.weight, edge.target_innov
+            );
         }
 
         for node_i in 0..nn.nodes.len() {
-            println!("idx: {}, output: {}, kind: {:?}", node_i, nn.nodes[node_i].output, nn.nodes[node_i].kind)
+            println!(
+                "idx: {}, output: {}, bias: {:?}",
+                node_i, nn.nodes[node_i].output, nn.nodes[node_i].bias
+            )
         }
-
-        // components of net input going into output
-        let mut net_comps_3 = Vec::new();
-        for in_edge_i in &nn.nodes[3].in_edges {
-            let source_i = nn.edges[*in_edge_i].source_i;
-            net_comps_3.push(nn.nodes[source_i].output * nn.edges[*in_edge_i].weight)
-        }
-        net_comps_3.push(nn.nodes[3].bias);
-
-        let mut net_comps_4 = Vec::new();
-        for in_edge_i in &nn.nodes[4].in_edges {
-            let source_i = nn.edges[*in_edge_i].source_i;
-            net_comps_4.push(nn.nodes[source_i].output * nn.edges[*in_edge_i].weight)
-        }
-        net_comps_4.push(nn.nodes[4].bias);
-        println!("Node 3 inputs: {:?}", net_comps_3);
-        println!("Node 4 inputs: {:?}", net_comps_4);
-
-        let outputs = nn.get_outputs();
-
-        assert!((outputs[0] - 0.997527).abs() < 1e-3);
-        assert!((outputs[1] - 0.993307).abs() < 1e-3)
+        
+        assert!((output[0] - 29.0).abs() < 1e-3)
     }
 }

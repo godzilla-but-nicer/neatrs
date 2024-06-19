@@ -1,5 +1,6 @@
 use crate::community::genome::Genome;
 
+#[derive(Debug, Clone)]
 pub struct Organism {
     pub genome: Genome,
     pub raw_fitness: f64,

@@ -12,26 +12,14 @@ use std::collections::HashMap;
 /// This struct contains all of the information and implementations to convert sensor values into
 /// control outputs through an evolved potentially recurrant neural network.
 /// 
-/// # Attributes
+/// In terms of NEAT itself, NeuralNetwork objects will be used within fitness evaluation. A 
+/// fitness function will likely convert Genomes into NeuralNetworks in a simulated envioronment to
+/// test evolving agent controls. NeuralNetwork objects can also be used following evolution to
+/// provide behavior to evolved agents.
 /// 
-/// * `nodes` - Vector of Node objects consisting of all nodes in the network
-/// 
-/// * `edges` - Vector of Edge objects consisting of all edges in the network
-/// 
-/// * `sensor_idx` - Vector of integers identifying the indices of `NeuralNetwork.nodes` that
-/// are sensor nodes
-/// 
-/// * `output_idx` - Vector of integers identifying the indices of `NeuralNetwork.edges` that
-/// are output nodes
-/// 
-/// * `activation_order` - Vector of integers corresponding to node integers that describe an
-/// ordering of nodes that ensures each node is ready to activate when visited
-/// 
-/// * `topology` - Graph object that can provide topological descriptions and functionality in
-/// future versions
-/// 
-/// * `node_map` - HashSet that allows various methods to convert Node innovation numbers to
-/// indices in NeuralNetwork.nodes. This is useful for compatability with other modules.
+/// The main interactions users will have with these objects then is in their creation with the
+/// constructor `NeuralNetwork::from_genome()`and conversion of sensor readings into control 
+/// outputs with the method `nn.propogate()`.
 struct NeuralNetwork {
     nodes: Vec<Node>,
     edges: Vec<Edge>,
@@ -137,7 +125,7 @@ impl NeuralNetwork {
             sensor_idx: genome.sensor_innovs.clone(),
             output_idx: genome.output_innovs.clone(),
             activation_order: Vec::new(),
-            topology: Graph::new(genome.sensor_innovs.clone(), genome.output_innovs.clone()),
+            topology: Graph::new(),
             node_map: node_map
         };
 
@@ -229,13 +217,13 @@ mod tests {
 
         for node_i in 0..nn.nodes.len() {
             println!(
-                "idx: {}, output: {}, in_edges: {:?}",
-                node_i, nn.nodes[node_i].output, nn.nodes[node_i].in_edges
+                "idx: {}, innov: {}, in_edges: {:?}",
+                node_i, nn.nodes[node_i].innov, nn.nodes[node_i].in_edges
             )
         }
 
-        assert!(nn.edges[5].source_innov == 1);
-        assert!(nn.nodes[6].in_edges[2] == 11);
+        assert!(nn.edges[3].source_innov == 3);
+        assert!(nn.nodes[2].in_edges[1] == 2);
         assert!(nn.sensor_idx[1] == 1)
     }
 

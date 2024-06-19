@@ -67,6 +67,10 @@ impl Node {
         1. / (1. + (-x).exp())
     }
 
+    pub fn linear(x: f64) -> f64 {
+        x
+    }
+
     // useful for testing
     /// simple step function. used for testing
     fn _heaviside(x: f64) -> f64 {

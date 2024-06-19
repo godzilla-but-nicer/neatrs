@@ -10,6 +10,8 @@ use crate::community::species::Species;
 use crate::community::organism::Organism;
 use crate::community::recombination::{Alignment, AlignmentParams};
 
+use self::genome::GenomeParams;
+
 
 #[derive(Debug)]
 pub struct CommunityParams {
@@ -22,7 +24,7 @@ pub struct CommunityParams {
 impl CommunityParams {
     pub fn new() -> CommunityParams {
         CommunityParams {
-            species_thresh: 1.5,
+            species_thresh: 0.6,
             disjoint_importance: 1.,
             excess_importance: 1.,
             weight_importance: 0.2,
@@ -31,13 +33,14 @@ impl CommunityParams {
     
     pub fn get_test_params() -> CommunityParams {
         CommunityParams {
-            species_thresh: 1.3,
+            species_thresh: 0.2,
             disjoint_importance: 1.,            
             excess_importance: 1.,
             weight_importance: 0.1,
         }
     }
 }
+const NUM_THREADS: usize = 2;
 
 pub struct Community {
     genome_pool: Vec<Genome>,
@@ -56,47 +59,61 @@ impl Community {
         let mut species_list = Vec::new();
 
         // each genome is used to make an organism of a particular genome
-        for genome in &self.genome_pool {
+        for genome_i in 0..self.genome_pool.len() {
 
             // if we don't have any species so far we make one
             if species_list.len() == 0 {
+
                 let mut new_species = Species::new(0);
-                new_species.add_from_genome(genome.clone());
+                new_species.add_from_genome(self.genome_pool[genome_i].clone());
                 species_list.push(new_species);
             
             // if we do have species we need to check them for compatibility
             } else {
 
                 // check each species
+                // this flag keeps track of if we need to make a new species or not
+                let mut genome_assigned = false;
                 for sp_i in 0..species_list.len() {
 
-                    // get incompatability with a random genome serving as proxy for the species
-                    let paragon = species_list[sp_i].get_random_specimen();
-                    let a_params = AlignmentParams { crossover_mode: recombination::CrossoverMode::SimpleRandom }; // this is extremely sketchy, I should expand CrossoverMode to include an Unknown option for when it shouldnt matter
-                    let mismatches = Alignment::raw_incompatibility(&paragon.genome, 
-                                                                       &genome,
-                                                                    &a_params);
-                    let disjoint = self.params.disjoint_importance * mismatches.base_disjoint;
-                    let excess = self.params.excess_importance * mismatches.base_excess;
-                    let weight_diff = self.params.weight_importance * mismatches.base_weight_diff;
-
-                    let incompatability = disjoint + excess + weight_diff;
+                    let incompatability = self.species_incompatibility(&self.genome_pool[genome_i], &species_list[sp_i]);
 
                     // if sufficiently compatible add to species, move on
                     if incompatability < self.params.species_thresh {
-                        species_list[sp_i].add_from_genome(genome.clone());
+                        species_list[sp_i].add_from_genome(self.genome_pool[genome_i].clone());
+                        genome_assigned = true;
                         break
-
-                    // make new species if needed
-                    } else if sp_i == (species_list.len() - 1) {
-                        let mut new_species = Species::new(sp_i + 1);
-                        new_species.add_from_genome(genome.clone());
-                        species_list.push(new_species);
                     }
+                }
+
+                // if the genome is left unassigned we 
+                if !genome_assigned {
+                    let mut new_species = Species::new(species_list.len());
+                    new_species.add_from_genome(self.genome_pool[genome_i].clone());
+                    species_list.push(new_species);
+
                 }
             }
         }
-        return species_list
+        
+        species_list
+    }
+
+    fn species_incompatibility(&self, genome: &Genome, species: &Species) -> f64 {
+
+        // pull out an example from the population
+        let paragon = species.get_random_specimen();
+
+        let a_params = AlignmentParams { crossover_mode: recombination::CrossoverMode::Alternating };
+        let unweighted_incompatibility = Alignment::raw_incompatibility(genome, &paragon.genome, &a_params);
+
+        // correct the incompatibility values
+        let disjoint = self.params.disjoint_importance * unweighted_incompatibility.base_disjoint;
+        let excess = self.params.excess_importance * unweighted_incompatibility.base_excess;
+        let weight_diff = self.params.weight_importance * unweighted_incompatibility.base_weight_diff;
+
+        disjoint + excess + weight_diff
+    
     }
 
     // calculates the species shared fitness to determine the sizes of the
@@ -162,41 +179,46 @@ mod tests {
     #[test]
     fn test_identify_species() {
         // make a couple of sparse genomes
-        let mut gen_1 = Genome::new_dense(2, 3);
+        let mut gen_0 = Genome::new_dense(3, 4);
+        gen_0._remove_by_innovation(0);
+        gen_0._remove_by_innovation(1);
+        gen_0._remove_by_innovation(2);
+        gen_0.params = GenomeParams::get_test_params();
+
+        let mut gen_1 = Genome::new_dense(3, 4);
         gen_1._remove_by_innovation(0);
         gen_1._remove_by_innovation(1);
         gen_1._remove_by_innovation(2);
-        gen_1._remove_by_innovation(4);
-
-        let mut gen_2 = Genome::new_dense(2, 3);
-        gen_2._remove_by_innovation(0);
-        gen_2._remove_by_innovation(1);
-        gen_2._remove_by_innovation(2);
-        gen_2.params = GenomeParams::get_test_params();
+        gen_1.params = GenomeParams::get_test_params();
 
         // make a couple of dense genomes
-        let mut gen_3 = Genome::new_dense(2, 3);
+        let mut gen_2 = Genome::new_dense(3, 4);
+        gen_2.params = GenomeParams::get_test_params();
+        let mut gen_3 = Genome::new_dense(3, 4);
         gen_3.params = GenomeParams::get_test_params();
-        let mut gen_4 = Genome::new_dense(2, 3);
-        gen_4.params = GenomeParams::get_test_params();
 
         // make community and assign species
-        let mut comm = Community::new(4, 2, 3);
+        let mut comm = Community::new(4, 3, 4);
         
         // insert our knowns
         comm.params = CommunityParams::get_test_params();
-        comm.genome_pool[0] = gen_1.clone();
-        comm.genome_pool[1] = gen_2.clone();
-        comm.genome_pool[2] = gen_3.clone();
-        comm.genome_pool[3] = gen_4.clone();
+        comm.genome_pool[0] = gen_0.clone();
+        comm.genome_pool[1] = gen_1.clone();
+        comm.genome_pool[2] = gen_2.clone();
+        comm.genome_pool[3] = gen_3.clone();
         
         comm.species = comm.identify_species();
 
-        println!("{}", comm.species.len());
-        assert!(comm.species[0].population[0].genome == gen_1);
-        assert!(comm.species[0].population[1].genome == gen_2);
-        assert!(comm.species[1].population[0].genome == gen_3);
-        assert!(comm.species[1].population[1].genome == gen_4);
+        println!("Number of species: {}", comm.species.len());
+
+        for i in 0..comm.species.len() {
+            println!("Population size of species {}: {}", i, comm.species[i].size)
+        }
+
+        assert!(comm.species[0].population[0].genome == gen_0);
+        assert!(comm.species[0].population[1].genome == gen_1);
+        assert!(comm.species[1].population[0].genome == gen_2);
+        assert!(comm.species[1].population[1].genome == gen_3);
         assert!(comm.species.len() == 2) 
     }
 

@@ -80,7 +80,7 @@ impl Genome {
         let mut found = false;
         let mut iidx = 0;
 
-        for gene_i in 0..self.edge_genes.len() {
+        for gene_i in 0..self.node_genes.len() {
             if self.node_genes[gene_i].innov == innov {
                 iidx = gene_i;
                 found = true;
@@ -115,21 +115,19 @@ impl Genome {
 
     // genome that translates to a dense two-layer network
     pub fn new_dense(sensors: usize, outputs: usize) -> Genome {
-        // rng for gene initialization
-        let mut rng = rand::thread_rng();
-
+        
         // we can start with the nodes
         let mut node_genes = Vec::with_capacity(sensors + outputs);
         let mut sensor_innovs = Vec::with_capacity(sensors);
         let mut output_innovs = Vec::with_capacity(outputs);
 
         for si in 0..sensors {
-            node_genes.push(Node::new(si, 0.0, |x| x));
+            node_genes.push(Node::new(si, 0.0, Node::linear));
             sensor_innovs.push(si);
         }
 
         for oi in 0..outputs {
-            node_genes.push(Node::new(sensors + oi, rng.gen_range(-1.0..1.0), |x| x));
+            node_genes.push(Node::new(sensors + oi, 0.0, Node::linear));
             output_innovs.push(sensors + oi);
         }
 
@@ -141,8 +139,7 @@ impl Genome {
         // we will start with sensors fully connected to outputs
         for si in 0..sensors {
             for oi in 0..outputs {
-                let unif_weight: f64 = rng.gen_range(-1.0..1.0);
-                edge_genes.push(Edge::new(innov_num, si, sensors + oi, unif_weight));
+                edge_genes.push(Edge::new(innov_num, si, sensors + oi, 0.0));
                 innovs.push(innov_num);
                 innov_num += 1;
             }
@@ -160,7 +157,38 @@ impl Genome {
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
-    // use rstest::*;
+    use rstest::{fixture, rstest};
+    use super::*;
 
+    #[rstest]
+    #[case(3, 3)]
+    #[case(6, 666)]
+    fn test_edge_index_from_innov(#[case] innov: usize, #[case] index: usize) {
+        let g = Genome::new_dense(2, 3);
+
+        let found_index: usize;
+        match g.edge_index_from_innov(innov) {
+            None => found_index = 666,
+            Some(idx) => found_index = idx,
+        };
+
+        assert_eq!(found_index, index)
+
+    }
+    
+    #[rstest]
+    #[case(3, 3)]
+    #[case(5, 666)]
+    fn test_node_index_from_innov(#[case] innov: usize, #[case] index: usize) {
+        let g = Genome::new_dense(2, 3);
+
+        let found_index: usize;
+        match g.node_index_from_innov(innov) {
+            None => found_index = 666,
+            Some(idx) => found_index = idx,
+        };
+
+        assert_eq!(found_index, index)
+
+    }
 }

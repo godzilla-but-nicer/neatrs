@@ -10,7 +10,7 @@ use crossbeam::thread;
 use super::innovation_tracker::{self, InnovationTracker};
 use super::mutation::MutationInfo;
 
-const NUM_THREADS: usize = 6;
+const NUM_THREADS: usize = 2;
 
 /// Provides named fields for parameters that specify how species and reproduction function.
 /// 
@@ -33,7 +33,7 @@ pub struct SpeciesParams {
 impl SpeciesParams {
     pub fn new() -> SpeciesParams {
         SpeciesParams {
-            mate_fraction: 10.0,
+            mate_fraction: 0.70,
             num_elites: 3,
             prob_structural: 0.3,
             crossover_mode: CrossoverMode::SimpleRandom,
@@ -42,7 +42,7 @@ impl SpeciesParams {
 
     pub fn get_test_params() -> SpeciesParams {
         SpeciesParams {
-            mate_fraction: 10.0,
+            mate_fraction: 0.70,
             num_elites: 1,
             prob_structural: 0.3,
             crossover_mode: CrossoverMode::Alternating,
@@ -67,7 +67,7 @@ pub struct ReproductionUpdates {
 #[derive(Debug)]
 pub struct Species {
     id: usize,
-    size: usize,
+    pub size: usize,
     pub population: Vec<Organism>,
     params: SpeciesParams, 
 }
@@ -77,6 +77,7 @@ impl Species {
     pub fn add_from_genome(&mut self, gen: Genome) {
         let new_org = Organism::new(gen);
         self.population.push(new_org);
+        self.size += 1;
     }
 
     /// Produces a random member of the Species used to check compatability when populating species.
@@ -403,7 +404,7 @@ mod tests {
         test_species.add_from_genome(gen_1);
         test_species.add_from_genome(gen_2);
         test_species.add_from_genome(gen_3);
-        
+
         let fitness_vals = test_species.calculate_raw_fitness(n_genes);
 
         assert!((fitness_vals[0] - 2.0).abs() < 1e5);

@@ -29,7 +29,7 @@ impl Edge {
             source_innov: 0,
             target_innov: 0,
             weight: 0.0,
-            enabled: false,
+            enabled: true,
         }
     }
 }

@@ -222,7 +222,7 @@ mod tests {
         gen._remove_by_innovation(5);
         let mutated = add_connection(gen, 1, 4, &three_by_four_tracker);
 
-        let new_edge = three_by_four.edge_genes.last().unwrap().clone();
+        let new_edge = mutated.edge_genes.last().unwrap().clone();
 
         assert!(new_edge.innov == 12);
         assert!(new_edge.source_innov == 1);

@@ -38,7 +38,7 @@ impl<T: Clone> Locus<T> {
 /// missing the focal gene
 #[derive(Clone, Debug, PartialEq)]
 pub enum PotentialMismatch {
-    Match(f64), // float represents weight difference
+    Match(Option<f64>), // float represents weight difference
     Mismatch,
 }
 
@@ -57,7 +57,7 @@ pub struct AlignmentParams {
 
 /// Provides named fields for the incompatability numbers so we don't get confused elsewhere.
 /// Weighing and summing these values occurs in Species
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct IncompatabilityComponents {
     pub base_disjoint: f64,
     pub base_excess: f64,
@@ -76,19 +76,9 @@ struct GenomeStructure {
 /// assigning species groupings. Second, for creating new genomes through the recombination of two
 /// parent genomes.
 /// 
-/// This object holds sorted vectors of Loci in innovation number order with Gaps inserted such an
+/// This object holds sorted vectors of Loci in innovation number order with Gaps inserted such that an
 /// index refers to the same innovation number or gap for each genome. These vectors for both Nodes
 /// and Edges are the core data held by Alignments.
-/// 
-/// # Attributes
-/// 
-/// * `edgeomes` - Vec<Vec<Locus<Edge>>> - (2, $L$) 
-/// ** Alignment of edge Loci from both genomes in innovation number order with gaps filling Loci 
-/// where genes are missing
-/// 
-/// * `nodeomes` - Vec<Vec<Locus<Node>>> - (2, $N$)
-/// ** Alignment of node Loci from both genomes in innovation number order with gaps filling Loci 
-/// where genes are missing
 #[derive(Clone, Debug)]
 pub struct Alignment<'a> {
     // actual objects upon which recombination acts
@@ -185,17 +175,7 @@ impl <'a> Alignment<'a> {
     /// in one genome with higher innovation numbers than contained in the partner genome, disjoint
     /// genes---where only one genome contains a particular innovation numbered gene but not due to
     /// simply "more evolution" in that genome, and weight differences---the average difference in
-    /// weights for genes contained in both genomes.
-    /// 
-    /// # Arguments
-    /// 
-    /// * `p0` - The first parent's genome
-    /// * `p1` - The second parent's genome
-    /// * `params` - Parameters needed for alignment construction
-    /// 
-    /// # Returns
-    /// 
-    /// * struct of base incompatibility components
+    /// weights for genes contained in both genomes. 
     pub fn raw_incompatibility(p0: &Genome, p1: &Genome, params: &'a AlignmentParams) -> IncompatabilityComponents {
         // align to count disjoint and excess genes
         let alignment = Self::from_parents(&p0, &p1, params);
@@ -204,14 +184,29 @@ impl <'a> Alignment<'a> {
         let mut internal_mismatches = 0;
         let mut external_mismatches = 0;
         let mut diffs = 0.0;
+        let mut diff_norm = 0.0;
 
 
         for locus in 0..alignment.max_edge_innov {
+
+            // if the locus is in the area we count as "disjoint"
             if locus < alignment.excess_locus {
+            
                 match alignment.check_mismatch(locus) {
+            
                     PotentialMismatch::Mismatch => internal_mismatches += 1,
-                    PotentialMismatch::Match(diff) => diffs += diff,
+                    PotentialMismatch::Match(optional_diff) => match optional_diff {
+            
+                        Some(diff) => {
+                            diffs += diff;
+                            diff_norm += 1.0;
+                        }
+                        None => continue
+            
+                    }
                 };
+
+            // if the locus is in the area we could as "excess"
             } else {
                 external_mismatches += 1;
             }
@@ -220,7 +215,7 @@ impl <'a> Alignment<'a> {
         // normalize
         let external_norm = external_mismatches as f64 / alignment.edgeomes[0].len() as f64;
         let internal_norm = internal_mismatches as f64 / alignment.edgeomes[0].len() as f64;
-        let avg_diff = diffs / alignment.edgeomes[0].len() as f64;
+        let avg_diff = diffs / diff_norm;
 
         IncompatabilityComponents {
             base_disjoint: internal_norm,
@@ -251,10 +246,12 @@ impl <'a> Alignment<'a> {
             }
         };
 
-        if p0_missing | p1_missing {
+        if p0_missing ^ p1_missing {
             PotentialMismatch::Mismatch
+        } else if !p0_missing & !p1_missing {
+            PotentialMismatch::Match(Some((p0_weight - p1_weight).abs()))
         } else {
-            PotentialMismatch::Match((p0_weight - p1_weight).abs())
+            PotentialMismatch::Match(None)
         }
     }
 
@@ -334,7 +331,7 @@ impl <'a> Alignment<'a> {
         let mut par_nodeome: Vec<Locus<Node>> = Vec::new();
 
         for i in 0..=innov_num {
-            match parent.edge_index_from_innov(i) {
+            match parent.node_index_from_innov(i) {
                 None => par_nodeome.push(Locus::Gap),
                 Some(x) => {
                     let par_gene = parent.node_genes[x].clone();
@@ -471,6 +468,7 @@ impl <'a> Alignment<'a> {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use rstest::{fixture, rstest};
 
@@ -484,68 +482,91 @@ mod tests {
 
     #[rstest]
     fn test_from_parents(test_params: AlignmentParams) {
-        let mut gen_1 = Genome::new_dense(3, 4);
-        let mut gen_2 = Genome::new_dense(3, 5);
+        let mut gen_1 = Genome::new_dense(2, 2);
+        let mut gen_2 = Genome::new_dense(2, 2);
 
         // remove a couple of genes
-        gen_1._remove_by_innovation(3);
-        gen_1._remove_by_innovation(4);
-        gen_1._remove_by_innovation(6);
-        gen_2._remove_by_innovation(11);
+        gen_1._remove_by_innovation(1);
+        gen_1._remove_by_innovation(2);
+        gen_2._remove_by_innovation(1);
+        gen_2._remove_by_innovation(3);
 
         // we need to construct some known edgeomes and nodeomes
-        // easy to write down indices and we'll fill the -omes in loops
-        let known_1_edge_idx: Vec<i32> = vec![0, 1, 2, -1, -1, 5, -1, 7, 8, 9, 10, 11, -1, -1, -1];
-        let known_2_edge_idx: Vec<i32> = vec![0, 1, 2, 3, 4, 5, -1, 7, 8, 9, 10, -1, 12, 13, 14];
+        let edges_1 = vec![Locus::Gene(Edge::new(0, 0, 2, 0.0)),
+                                             Locus::Gap,
+                                             Locus::Gap,
+                                             Locus::Gene(Edge::new(3, 1, 3, 0.0))];
+        let edges_2 = vec![Locus::Gene(Edge::new(0, 0, 2, 0.0)),
+                                             Locus::Gap,
+                                             Locus::Gene(Edge::new(2, 1, 2, 0.0)),
+                                             Locus::Gap];
 
-        // declare our knowns
-        let mut edges_1: Vec<Locus<Edge>> = Vec::new();
-        let mut edges_2: Vec<Locus<Edge>> = Vec::new();
-
-        for i in 0..known_1_edge_idx.len() {
-            if known_1_edge_idx[i] >= 0 {
-                let gene = Locus::Gene(Edge::new_dummy(known_1_edge_idx[i] as usize));
-                edges_1.push(gene);
-            } else {
-                edges_1.push(Locus::Gap)
-            }
-
-            if known_2_edge_idx[i] >= 0 {
-                let gene = Locus::Gene(Edge::new_dummy(known_2_edge_idx[i] as usize));
-                edges_2.push(gene);
-            } else {
-                edges_2.push(Locus::Gap)
-            }
-        }
-
-        let known_1_node_idx: Vec<i32> = vec![0, 1, 2, 3, 4, 5, 6, -1];
-        let known_2_node_idx: Vec<i32> = vec![0, 1, 2, 3, 4, 5, 6, 7];
-        
-        let mut nodes_1: Vec<Locus<Node>> = Vec::new();
-        let mut nodes_2: Vec<Locus<Node>> = Vec::new();
-        for i in 0..known_1_node_idx.len() {
-            if known_1_node_idx[i] >= 0 {
-                let gene = Locus::Gene(Node::new(known_1_node_idx[i] as usize, 0., |x| x));
-                nodes_1.push(gene);
-            } else {
-                nodes_1.push(Locus::Gap)
-            }
-
-            if known_2_node_idx[i] >= 0 {
-                let gene = Locus::Gene(Node::new(known_2_node_idx[i] as usize, 0., |x| x));
-                nodes_2.push(gene);
-            } else {
-                nodes_2.push(Locus::Gap)
-            }
-        }
+        let nodes_1 = vec![Locus::Gene(Node::new(0, 0.0, Node::linear)),
+                                             Locus::Gene(Node::new(1, 0.0, Node::linear)),
+                                             Locus::Gene(Node::new(2, 0.0, Node::linear)),
+                                             Locus::Gene(Node::new(3, 0.0, Node::linear))];
+        let nodes_2 = vec![Locus::Gene(Node::new(0, 0.0, Node::linear)),
+                                             Locus::Gene(Node::new(1, 0.0, Node::linear)),
+                                             Locus::Gene(Node::new(2, 0.0, Node::linear)),
+                                             Locus::Gene(Node::new(3, 0.0, Node::linear))];
 
         let aln = Alignment::from_parents(&gen_1, &gen_2, &test_params);
+
+        println!("Edges");
+        for gene_i in 0..aln.edgeomes[0].len() {
+            match aln.edgeomes[0][gene_i] {
+                Locus::Gene(_) => println!("(p1, locus {}): Gene", gene_i),
+                Locus::Gap => println!("(p1, locus {}): Gap", gene_i)
+            }
+            match aln.edgeomes[1][gene_i] {
+                Locus::Gene(_) => println!("(p2, locus {}):      Gene", gene_i),
+                Locus::Gap => println!("(p2, locus {}):      Gap", gene_i)
+            }
+        }
+        println!("Nodes");
+        for gene_i in 0..aln.nodeomes[0].len() {
+            match aln.nodeomes[0][gene_i] {
+                Locus::Gene(_) => println!("(p1, locus {}): Gene", gene_i),
+                Locus::Gap => println!("p1, locus {}: Gap", gene_i)
+            }
+            match aln.nodeomes[1][gene_i] {
+                Locus::Gene(_) => println!("(p2, locus {}):      Gene", gene_i),
+                Locus::Gap => println!("(p2, locus {}):      Gap", gene_i)
+            }
+        }
 
         assert_eq!(edges_1, aln.edgeomes[0]);
         assert_eq!(edges_2, aln.edgeomes[1]);
         assert_eq!(nodes_1, aln.nodeomes[0]);
         assert_eq!(nodes_2, aln.nodeomes[1]);
-        assert_eq!(14, aln.max_edge_innov);
-        assert_eq!(7, aln.max_node_innov)
+        assert_eq!(3, aln.max_edge_innov);
+        assert_eq!(3, aln.max_node_innov)
+    }
+
+    #[rstest]
+    fn test_raw_incompatibility() {
+
+        let known = IncompatabilityComponents {
+            base_disjoint: 2.0 / 6.0,
+            base_excess: 1.0 / 6.0,
+            base_weight_diff: 2.0 / 2.0,
+        };
+
+        let mut gen_1 = Genome::new_dense(2, 3);
+        let mut gen_2 = Genome::new_dense(2, 3);
+
+        // set the weights of some of the genes
+        gen_1.edge_genes[0].weight = 1.0;
+        gen_2.edge_genes[4].weight = 1.0;
+        
+        // remove a couple of genes
+        gen_1._remove_by_innovation(1);
+        gen_1._remove_by_innovation(2);
+        gen_1._remove_by_innovation(3);
+        gen_2._remove_by_innovation(1);
+        gen_2._remove_by_innovation(5);
+
+
+        assert_eq!{known, Alignment::raw_incompatibility(&gen_1, &gen_2, &test_params())}
     }
 }

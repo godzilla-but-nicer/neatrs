@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::error;
 use std::fmt;
-use std::thread::current;
 
 use rstest::{fixture, rstest};
 use topo_sort::{self, CycleError};

@@ -3,10 +3,13 @@ use rand::prelude::*;
 use crate::neural_network::edge::Edge;
 use crate::neural_network::node::*;
 
+use serde::{Serialize, Deserialize};
+
 
 #[derive(Clone)]
 #[derive(PartialEq)]
 #[derive(Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct GenomeParams {
     pub insert_prob: f64,
     pub connect_prob: f64,

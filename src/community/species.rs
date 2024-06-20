@@ -7,6 +7,8 @@ use crate::community::mutation::{mutate};
 use rand::prelude::*;
 use crossbeam::thread;
 
+use serde::{Serialize, Deserialize};
+
 use super::innovation_tracker::{self, InnovationTracker};
 use super::mutation::MutationInfo;
 
@@ -22,7 +24,7 @@ const NUM_THREADS: usize = 2;
 ///   of sexual reproduction
 /// * `prob_structural` - The probability of a structural mutation occurring during reproduction
 /// * `crossover_mode` - The type of crossing other that occurs when recombining a a child genome
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SpeciesParams {
     pub mate_fraction: f64,
     pub num_elites: usize,

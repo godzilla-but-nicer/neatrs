@@ -10,10 +10,12 @@ use crate::community::species::Species;
 use crate::community::organism::Organism;
 use crate::community::recombination::{Alignment, AlignmentParams};
 
+use serde::{Deserialize, Serialize};
+
 use self::genome::GenomeParams;
 
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct CommunityParams {
     pub species_thresh: f64,
     pub disjoint_importance: f64,
@@ -144,7 +146,7 @@ impl Community {
         next_sizes
     }
 
-    fn new(n_genomes: usize, inputs: usize, outputs: usize) -> Community {
+    pub fn new(n_genomes: usize, inputs: usize, outputs: usize) -> Community {
         
         // build genomes
         let mut genome_pool = Vec::with_capacity(n_genomes);

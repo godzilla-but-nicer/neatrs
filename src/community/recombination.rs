@@ -4,6 +4,7 @@ use crate::neural_network::node::Node;
 
 use std::error::Error;
 use rand::{prelude, Rng};
+use serde::{Serialize, Deserialize};
 
 use super::{innovation_tracker::InnovationTracker, genome::GenomeParams};
 
@@ -43,7 +44,7 @@ pub enum PotentialMismatch {
 }
 
 /// Allows simple pattern matching for pretty syntax when handling crossover
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum CrossoverMode {
     Alternating,
     SimpleRandom,

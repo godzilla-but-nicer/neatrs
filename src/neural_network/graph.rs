@@ -73,6 +73,8 @@ impl Graph {
     /// # Example
     ///
     /// ```
+    /// use neatrs::neural_network::graph::Graph;
+    /// 
     /// let edges = vec![[0, 2], [0, 1], [1, 2]];
     /// let my_graph = Graph::from_edge_list(edges, vec![0], vec![2]);
     /// ```
@@ -98,9 +100,17 @@ impl Graph {
     /// # Example
     ///
     /// ```
+    /// use neatrs::neural_network::graph::Graph;
+    /// use std::collections::HashSet;
+    /// 
     /// let edges = vec![[0, 1], [1, 2], [0, 2]];
-    /// let preds = Graph::dependency_map(&edges, True);
-    /// assert_eq!(preds[2], vec![0, 1])
+    /// let preds = Graph::dependency_map(&edges, true);
+    /// 
+    /// let mut known: HashSet<usize> = HashSet::new();
+    /// known.insert(0);
+    /// known.insert(1);
+    /// 
+    /// assert_eq!(preds[&2], known)
     /// ```
     pub fn dependency_map(
         edge_list: &Vec<[usize; 2]>,
@@ -144,8 +154,10 @@ impl Graph {
     ///  # Example
     ///
     /// ```
+    /// use neatrs::neural_network::graph::Graph;
+    /// 
     /// let edges = vec![[0, 1], [1, 2], [0, 2]];
-    /// let g = Graph::from_edge_list(edges, 0, 2);
+    /// let g = Graph::from_edge_list(edges, vec![0], vec![2]);
     /// assert_eq!(g.topological_sort().unwrap(), vec![0, 1, 2])
     /// ```
     pub fn topological_sort(&self) -> Result<Vec<usize>, CycleError> {
@@ -180,9 +192,11 @@ impl Graph {
     /// # Example
     ///
     /// ```
+    /// use neatrs::neural_network::graph::Graph;
+    /// 
     /// let edges = vec![[0, 1], [0, 2], [1, 2]];
     /// let g = Graph::from_edge_list(edges, vec![0], vec![2]);
-    /// assert_eq!(g.recurrant_pseudosort(), vec![0, 1, 2])
+    /// assert_eq!(g.recurrent_pseudosort(), Ok(vec![0, 1, 2]))
     /// ```
     pub fn recurrent_pseudosort(&self) -> Result<Vec<usize>, ConnectivityError> {
         // essentially we will be flattening the layer map we get below
@@ -218,9 +232,11 @@ impl Graph {
     /// # Example
     ///
     /// ```
+    /// use neatrs::neural_network::graph::Graph;
+    /// 
     /// let edges = vec![[0, 2], [1, 2], [1, 3], [2, 3]];
     /// let g = Graph::from_edge_list(edges, vec![0, 1], vec![3]);
-    /// assert_eq!(g.get_node_depth(&3), 1);
+    /// assert_eq!(g.get_node_depth(&3), Ok(1));
     /// ```
     pub fn get_node_depth(&self, target_node: &usize) -> Result<usize, ConnectivityError> {
         let mut lengths: Vec<usize> = Vec::with_capacity(self.sensors.len());

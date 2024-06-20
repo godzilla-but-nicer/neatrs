@@ -3,7 +3,7 @@
 //! its NEAT, baby
 
 /// This module contains all of the neural network stuff
-mod neural_network;
+pub mod neural_network;
 
 // This modual contains all of the evolutionary stuff
 mod community;

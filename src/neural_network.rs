@@ -1,6 +1,6 @@
 pub mod edge;
 pub mod node;
-mod graph;
+pub mod graph;
 
 use crate::community::genome::Genome;
 use crate::neural_network::edge::Edge;
@@ -46,7 +46,12 @@ impl NeuralNetwork {
         // can we avoid this clone? it avoids double-borrowing when we call activate node
         for node_innov in &self.activation_order.clone() {
             let nidx = self.node_map[node_innov];
-            self.activate_node(&nidx)
+
+            if self.sensor_idx.contains(&nidx) {
+                self.activate_node(nidx, true);
+            } else {
+                self.activate_node(nidx, false);
+            }
         }
 
         self.get_output()
@@ -54,21 +59,28 @@ impl NeuralNetwork {
 
     
     /// Activation of a single Node by combinging incoming signals fro other active nodes
-    fn activate_node(&mut self, node_innov: &usize) {
-        // convert the innovation number to an index
-        let node_i = self.node_map[node_innov];
+    fn activate_node(&mut self, node_i: usize, is_sensor: bool) {
 
-        // init input with bias instead of adding later
+        // init net input with bias
         let mut net_input = self.nodes[node_i].bias;
-
-        for edge_i in &self.nodes[node_i].in_edges {
-            // locate the focal input
-            let edge = &self.edges[*edge_i];
-            let source_i = self.node_map[&edge.source_innov];
-            let source = &self.nodes[source_i];
-
-            net_input += source.output * edge.weight;
+        
+        // sensors are preloaded with read values in the output field
+        if is_sensor {
+        
+            net_input += self.nodes[node_i].output
+        
+        } else {
+            
+            for edge_i in &self.nodes[node_i].in_edges {
+                // locate the focal input
+                let edge = &self.edges[*edge_i];
+                let source_i = self.node_map[&edge.source_innov];
+                let source = &self.nodes[source_i];
+                
+                net_input += source.output * edge.weight;
+            }
         }
+        
         self.nodes[node_i].output = (self.nodes[node_i].activation)(net_input);
     }
 
@@ -233,16 +245,15 @@ mod tests {
         let mut nn = NeuralNetwork::from_genome(&singly_recurrant_genome);
 
         // set biass to something easy
-        for i in 0..nn.edges.len() {
+        for i in 0..nn.nodes.len() {
             nn.nodes[i].bias = i as f64;
         }
 
-        // set a couple of edges to something different
-        nn.edges[2].weight = 2.0;
-        nn.edges[4].weight = 3.0;
+        // set one edge to something different
+        nn.edges[4].weight = -1.0;
 
         // same for the sensors
-        let output = nn.propagate(vec![-1., 1.]);
+        let output = nn.propagate(vec![1., -2.]);
 
         // debug
         for edge in &nn.edges {
@@ -258,7 +269,14 @@ mod tests {
                 node_i, nn.nodes[node_i].output, nn.nodes[node_i].bias
             )
         }
+
+        // math worksheet
+        // 0: 1 + 0; 1: -2 + 1 = -1
+        // 3: (-1 * 2) + 3 = 1
+        // 2: (1 * 2) + (1 * 2) + 2 = 6
+        // 4: (1 * 2) + 4 = 6
+        // 5: (6 * -1) + (6 * 2) + 5 = -6 + 5 + 12 = 11
         
-        assert!((output[0] - 29.0).abs() < 1e-3)
+        assert!((output[0] - (11.0)).abs() < 1e-3)
     }
 }

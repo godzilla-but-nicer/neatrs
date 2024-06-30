@@ -45,6 +45,7 @@ pub struct Genome {
     pub sensor_innovs: Vec<usize>, // innovs of the sensor nodes
     pub output_innovs: Vec<usize>,
     pub params: GenomeParams,
+    pub raw_fitness: f64,
 }
 
 impl Genome {
@@ -112,6 +113,7 @@ impl Genome {
             sensor_innovs: sensors,
             output_innovs: outputs,
             params: GenomeParams::new(),
+            raw_fitness: 0.,
         }
 
     }
@@ -154,6 +156,7 @@ impl Genome {
             sensor_innovs,
             output_innovs,
             params: GenomeParams::new(),
+            raw_fitness: 0.0,
         }
     }
 }

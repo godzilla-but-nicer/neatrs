@@ -1,21 +1,25 @@
 pub mod genome;
-mod organism;
-mod species;
-mod recombination;
+pub mod species;
+pub mod recombination;
 mod innovation_tracker;
 mod mutation;
 
 use crate::community::genome::Genome;
 use crate::community::species::Species;
-use crate::community::organism::Organism;
 use crate::community::recombination::{Alignment, AlignmentParams};
 
+use innovation_tracker::InnovationTracker;
 use serde::{Deserialize, Serialize};
 
 use self::genome::GenomeParams;
 
+struct CommunityReproduction {
+    genome_pool: Vec<Genome>,
+    innovations: InnovationTracker,
+}
 
-#[derive(Serialize, Deserialize, Debug)]
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CommunityParams {
     pub species_thresh: f64,
     pub disjoint_importance: f64,
@@ -47,7 +51,7 @@ const NUM_THREADS: usize = 2;
 pub struct Community {
     genome_pool: Vec<Genome>,
     species: Vec<Species>,
-    next_innovation: usize,
+    innovation_tracker: InnovationTracker,
     params: CommunityParams,
 }
 
@@ -55,7 +59,7 @@ impl Community {
     // sorts and assigns genomes in the genome pool to species
     // kept seperate for testing
     // this means that community stores the unused genomes from construction
-    fn identify_species(&self) -> Vec<Species> {
+    pub fn identify_species(&self) -> Vec<Species> {
 
         // the returned vector
         let mut species_list = Vec::new();
@@ -101,13 +105,15 @@ impl Community {
         species_list
     }
 
+
+    // used inside of previous to separate genomes into species
     fn species_incompatibility(&self, genome: &Genome, species: &Species) -> f64 {
 
         // pull out an example from the population
         let paragon = species.get_random_specimen();
 
         let a_params = AlignmentParams { crossover_mode: recombination::CrossoverMode::Alternating };
-        let unweighted_incompatibility = Alignment::raw_incompatibility(genome, &paragon.genome, &a_params);
+        let unweighted_incompatibility = Alignment::raw_incompatibility(genome, &paragon, &a_params);
 
         // correct the incompatibility values
         let disjoint = self.params.disjoint_importance * unweighted_incompatibility.base_disjoint;
@@ -120,7 +126,7 @@ impl Community {
 
     // calculates the species shared fitness to determine the sizes of the
     // populations of the species for the next generation
-    fn next_species_sizes(&self, ffunc: fn(&Organism) -> f64) -> Vec<usize> {
+    fn next_species_sizes(&self, ffunc: fn(&Genome) -> f64) -> Vec<usize> {
         
         // numerator and needed for denominator 
         let mut sums: Vec<f64> = Vec::new();
@@ -146,6 +152,45 @@ impl Community {
         next_sizes
     }
 
+
+    // for each species produce a new genome pool for the next generation of the community
+    fn reproduce_all(&self, ffunc: fn(&Genome) -> f64) -> CommunityReproduction {
+
+        let mut new_innovation_tracker = self.innovation_tracker.clone();
+        let target_sizes = self.next_species_sizes(ffunc);
+
+        let mut total_new_genomes: usize = 0;
+
+        for ts in &target_sizes {
+            total_new_genomes += ts;
+        }
+
+        let mut new_genome_pool = Vec::with_capacity(total_new_genomes);
+
+        for sp_i in 0..self.species.len() {
+            let updates = self.species[sp_i].reproduce(target_sizes[sp_i], new_innovation_tracker);
+
+            for genome in updates.population {
+                new_genome_pool.push(genome);
+            }
+
+            new_innovation_tracker = updates.innovation_tracker;
+        }
+
+        CommunityReproduction {
+            genome_pool: new_genome_pool,
+            innovations: new_innovation_tracker,   
+        }
+
+    }
+
+    pub fn generation(&self, fitness_function: fn(&Genome) -> f64) -> Community {
+        self.identify_species();
+        let community_updates = self.reproduce_all(fitness_function);
+
+        Community::from_reproduction(community_updates, self.params.clone())
+    }
+
     pub fn new(n_genomes: usize, inputs: usize, outputs: usize) -> Community {
         
         // build genomes
@@ -167,8 +212,17 @@ impl Community {
         Community {
             genome_pool,
             species: Vec::new(),
-            next_innovation: max_innov + 1,
             params: CommunityParams::new(),
+            innovation_tracker: InnovationTracker::new(),
+        }
+    }
+
+    fn from_reproduction(reproduction_state: CommunityReproduction, community_params: CommunityParams) -> Community {
+        Community {
+            genome_pool: reproduction_state.genome_pool,
+            species: Vec::new(),
+            params: community_params,
+            innovation_tracker: reproduction_state.innovations,
         }
     }
 }
@@ -217,10 +271,10 @@ mod tests {
             println!("Population size of species {}: {}", i, comm.species[i].size)
         }
 
-        assert!(comm.species[0].population[0].genome == gen_0);
-        assert!(comm.species[0].population[1].genome == gen_1);
-        assert!(comm.species[1].population[0].genome == gen_2);
-        assert!(comm.species[1].population[1].genome == gen_3);
+        assert!(comm.species[0].population[0] == gen_0);
+        assert!(comm.species[0].population[1] == gen_1);
+        assert!(comm.species[1].population[0] == gen_2);
+        assert!(comm.species[1].population[1] == gen_3);
         assert!(comm.species.len() == 2) 
     }
 
@@ -260,8 +314,8 @@ mod tests {
         println!{"{:?}", comm.species.len()};
 
         // define a simple fitness function
-        fn genome_len(org: &Organism) -> f64 {
-            org.genome.edge_genes.len() as f64
+        fn genome_len(genome: &Genome) -> f64 {
+            genome.edge_genes.len() as f64
         }
 
         // get the sizes

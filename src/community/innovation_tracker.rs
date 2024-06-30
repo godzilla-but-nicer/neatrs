@@ -8,7 +8,7 @@ pub struct InnovationTracker {
 
 impl InnovationTracker {
 
-    fn new() -> InnovationTracker {
+    pub fn new() -> InnovationTracker {
         InnovationTracker {
             node_max_innov: 0,
             edge_max_innov: 0,

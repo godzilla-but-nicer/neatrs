@@ -1,4 +1,3 @@
-use crate::community::organism::Organism;
 use crate::community::genome::Genome;
 use crate::community::recombination::{Alignment, AlignmentParams, CrossoverMode};
 use crate::neural_network::edge::Edge;
@@ -53,8 +52,8 @@ impl SpeciesParams {
 }
 
 pub struct ReproductionUpdates {
-    population: Vec<Organism>,
-    innovation_tracker: InnovationTracker,
+    pub population: Vec<Genome>,
+    pub innovation_tracker: InnovationTracker,
 }
 
 /// The Species struct holds all of the data for sorting the population of genomes into subgroups
@@ -70,20 +69,19 @@ pub struct ReproductionUpdates {
 pub struct Species {
     id: usize,
     pub size: usize,
-    pub population: Vec<Organism>,
+    pub population: Vec<Genome>,
     params: SpeciesParams, 
 }
 
 impl Species {
     /// Add an Organism to the population from its Genome
     pub fn add_from_genome(&mut self, gen: Genome) {
-        let new_org = Organism::new(gen);
-        self.population.push(new_org);
+        self.population.push(gen);
         self.size += 1;
     }
 
     /// Produces a random member of the Species used to check compatability when populating species.
-    pub fn get_random_specimen(&self) -> &Organism {
+    pub fn get_random_specimen(&self) -> &Genome {
         let mut rng = rand::thread_rng();
         let specimen_i = rng.gen_range(0..self.size);
         &self.population[specimen_i]
@@ -102,11 +100,11 @@ impl Species {
         // determine who reproduces and who passes unchanged
         let mut reproducers = self.get_reproducers();
         let elites = self.get_elites(self.params.num_elites);
-        let mut new_population: Vec<Organism> = Vec::new();
+        let mut new_population: Vec<Genome> = Vec::new();
 
         // elites pass down directly with no mutation
         for elite_i in elites {
-            let new_elite = Organism::new(self.population[elite_i].genome.clone());
+            let new_elite = self.population[elite_i].clone();
             new_population.push(new_elite);
         }
         
@@ -124,7 +122,7 @@ impl Species {
             
             // align genomes and crossover into new genome
             let params = AlignmentParams { crossover_mode: self.params.crossover_mode.clone() };
-            let mut crossed_genome = Alignment::crossover(mom.genome, dad.genome, &params);
+            let mut crossed_genome = Alignment::crossover(mom, dad, &params);
             
             // mutate the new genomes
             let mut_info;
@@ -137,8 +135,8 @@ impl Species {
             // unpack the mutation info and update the tracker where appropriate
             innovation_tracker = innovation_tracker.update(&mut_info);
             match mut_info {
-                MutationInfo::Quantitative(gen) => new_population.push(Organism::new(gen)),
-                MutationInfo::Topological((gen, _)) => new_population.push(Organism::new(gen)),
+                MutationInfo::Quantitative(gen) => new_population.push(gen),
+                MutationInfo::Topological((gen, _)) => new_population.push(gen),
             };
         }
         
@@ -194,7 +192,7 @@ impl Species {
     /// heaviest computation occurs in evaluating the fitness function. We will adjust these values
     /// before using them to make evolutionary comparisons. This function should probably be broken
     /// up. e.g. spawn_fitness_thread() or spawn chunk_threads()
-    fn calculate_raw_fitness(&self, ffunc: fn(&Organism) -> f64) -> Vec<f64> {
+    fn calculate_raw_fitness(&self, ffunc: fn(&Genome) -> f64) -> Vec<f64> {
 
         // we're going to recieve indices and values from the child threads
         let mut i_fit_pairs = Vec::new();
@@ -269,7 +267,7 @@ impl Species {
 
     /// This function returns the adjusted fitness values for each Organism. These are the values we
     /// use to compare species.
-    pub fn calculate_fitness(&self, ffunc: fn(&Organism) -> f64) -> Vec<f64> {
+    pub fn calculate_fitness(&self, ffunc: fn(&Genome) -> f64) -> Vec<f64> {
 
         let raw_fitness = self.calculate_raw_fitness(ffunc);
         let mut adj_fitness = Vec::with_capacity(raw_fitness.len());
@@ -295,7 +293,7 @@ impl Species {
     }
     
     /// This function is used to make species for tests.
-    pub fn _add_organism(&mut self, org: Organism) {
+    pub fn _add_genome(&mut self, org: Genome) {
         self.population.push(org);
         self.size += 1;
     }
@@ -311,9 +309,9 @@ mod tests {
     fn test_sorted_pop_fitness() {
         // built a species with some organisms
         let mut spe = Species::new(0);
-        spe._add_organism(Organism::new(Genome::new_dense(2, 2)));
-        spe._add_organism(Organism::new(Genome::new_dense(2, 2)));
-        spe._add_organism(Organism::new(Genome::new_dense(2, 2)));
+        spe._add_genome(Genome::new_dense(2, 2));
+        spe._add_genome(Genome::new_dense(2, 2));
+        spe._add_genome(Genome::new_dense(2, 2));
 
         // assign some arbitrary fitness values
         spe.population[1].raw_fitness = 100.0;
@@ -330,9 +328,9 @@ mod tests {
         // built a species with some organisms
         let mut spe = Species::new(0);
         spe.params = SpeciesParams::get_test_params();
-        spe._add_organism(Organism::new(Genome::new_dense(2, 2)));
-        spe._add_organism(Organism::new(Genome::new_dense(2, 2)));
-        spe._add_organism(Organism::new(Genome::new_dense(2, 2)));
+        spe._add_genome(Genome::new_dense(2, 2));
+        spe._add_genome(Genome::new_dense(2, 2));
+        spe._add_genome(Genome::new_dense(2, 2));
 
         // assign some arbitrary fitness values
         spe.population[1].raw_fitness = 100.0;
@@ -393,8 +391,8 @@ mod tests {
     #[test]
     fn test_calculate_raw_fitness() {
 
-        fn n_genes(org: &Organism) -> f64 {
-            org.genome.edge_genes.len() as f64
+        fn n_genes(gen: &Genome) -> f64 {
+            gen.edge_genes.len() as f64
         }
         
         // genome size is easy test fitness func

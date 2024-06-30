@@ -1,0 +1,21 @@
+num_individuals: 100
+num_inputs: 2
+num_outputs: 1
+
+community: 
+  species_thresh: 0.6
+  disjoint_importance: 1.0
+  excess_importance: 1.0
+  weight_importance: 1.0
+
+species:
+  mate_fraction: 0.7
+  num_elites: 1
+  prob_structural: 0.3
+  crossover_mode: SimpleRandom
+  
+genome:
+  insert_prob: 0.5
+  connect_prob: 0.5
+  weight_mut_sd: 1.0
+  bias_mut_sd: 1.0

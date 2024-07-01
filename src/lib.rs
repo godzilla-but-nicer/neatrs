@@ -18,7 +18,7 @@ use serde::{Serialize, Deserialize};
 use rstest::{rstest, fixture};
 
 use std::fs::{self, File};
-//use std::io::prelude::*;
+use std::io::{prelude::*, BufWriter};
 
 #[derive(Serialize, Deserialize)]
 pub struct NEATParams {
@@ -66,6 +66,23 @@ impl NEAT {
         }
     }
 
+    pub fn write_fitness_values(&self, path: &str) {
+
+        let fitness_values = self.community.get_all_fitness_values(self.fitness_function);
+
+        let mut buffer = File::create(path).unwrap();
+        let mut writer = BufWriter::new(buffer);
+        for value  in fitness_values {
+            let line = format!("{value}\n");
+            writeln!(&mut writer, "{}", value).unwrap();
+        }
+
+    }
+
+    pub fn get_champion(&self) -> Genome {
+        self.community.get_best_genome(self.fitness_function)
+    }
+
 
     fn read_parameter_file(path_string: &str) -> NEATParams {
 
@@ -85,6 +102,10 @@ impl NEAT {
 
         params
     }
+
+    pub fn number_of_genomes(&self) -> usize {
+        self.community.genome_pool.len()
+    } 
 
 }
 

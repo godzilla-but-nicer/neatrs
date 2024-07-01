@@ -10,8 +10,10 @@ use crate::community::recombination::{Alignment, AlignmentParams};
 
 use innovation_tracker::InnovationTracker;
 use serde::{Deserialize, Serialize};
+use rstest::{rstest, fixture};
 
 use self::genome::GenomeParams;
+
 
 struct CommunityReproduction {
     genome_pool: Vec<Genome>,
@@ -49,7 +51,7 @@ impl CommunityParams {
 const NUM_THREADS: usize = 2;
 
 pub struct Community {
-    genome_pool: Vec<Genome>,
+    pub genome_pool: Vec<Genome>,
     species: Vec<Species>,
     innovation_tracker: InnovationTracker,
     params: CommunityParams,
@@ -121,7 +123,6 @@ impl Community {
         let weight_diff = self.params.weight_importance * unweighted_incompatibility.base_weight_diff;
 
         disjoint + excess + weight_diff
-    
     }
 
     // calculates the species shared fitness to determine the sizes of the
@@ -184,11 +185,38 @@ impl Community {
 
     }
 
-    pub fn generation(&self, fitness_function: fn(&Genome) -> f64) -> Community {
-        self.identify_species();
+    pub fn generation(&mut self, fitness_function: fn(&Genome) -> f64) -> Community {
+        self.species = self.identify_species();
         let community_updates = self.reproduce_all(fitness_function);
 
         Community::from_reproduction(community_updates, self.params.clone())
+    }
+
+    pub fn get_all_fitness_values(&self, fitness_function: fn(&Genome) -> f64) -> Vec<f64> {
+        
+        let mut raw_fitness = Vec::with_capacity(self.genome_pool.len());
+        for genome in &self.genome_pool {
+            raw_fitness.push(fitness_function(genome));
+        }
+
+        raw_fitness
+    }
+
+    pub fn get_best_genome(&self, fitness_function: fn(&Genome) -> f64) -> Genome {
+
+        let fitness_values = self.get_all_fitness_values(fitness_function);
+
+        let mut max_fit = 0.0;
+        let mut max_index = 0;
+        for (index, value) in fitness_values.iter().enumerate() {
+            if value > &max_fit {
+                max_fit = *value;
+                max_index = index;
+            }
+        }
+
+        self.genome_pool[max_index].clone()
+
     }
 
     pub fn new(n_genomes: usize, inputs: usize, outputs: usize) -> Community {
@@ -232,8 +260,8 @@ mod tests {
     use super::*;
     use genome::GenomeParams;
 
-    #[test]
-    fn test_identify_species() {
+    #[fixture]
+    fn test_community() -> Community {
         // make a couple of sparse genomes
         let mut gen_0 = Genome::new_dense(3, 4);
         gen_0._remove_by_innovation(0);
@@ -263,6 +291,15 @@ mod tests {
         comm.genome_pool[2] = gen_2.clone();
         comm.genome_pool[3] = gen_3.clone();
         
+        comm
+
+    }
+
+    #[rstest]
+    fn test_identify_species(test_community: Community) {
+
+        let mut comm = test_community;
+
         comm.species = comm.identify_species();
 
         println!("Number of species: {}", comm.species.len());
@@ -271,10 +308,10 @@ mod tests {
             println!("Population size of species {}: {}", i, comm.species[i].size)
         }
 
-        assert!(comm.species[0].population[0] == gen_0);
-        assert!(comm.species[0].population[1] == gen_1);
-        assert!(comm.species[1].population[0] == gen_2);
-        assert!(comm.species[1].population[1] == gen_3);
+        assert!(comm.species[0].population[0] == comm.genome_pool[0]);
+        assert!(comm.species[0].population[1] == comm.genome_pool[1]);
+        assert!(comm.species[1].population[0] == comm.genome_pool[2]);
+        assert!(comm.species[1].population[1] == comm.genome_pool[3]);
         assert!(comm.species.len() == 2) 
     }
 
@@ -324,5 +361,10 @@ mod tests {
         println!("{:?}", sizes);
         assert_eq!(sizes[0], 1);
         assert_eq!(sizes[1], 3)
+    }
+
+    #[test]
+    fn test_reproduce_all_count() {
+
     }
 }

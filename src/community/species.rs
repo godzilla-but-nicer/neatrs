@@ -265,7 +265,7 @@ impl Species {
         raw_fitness
     }
 
-    /// This function returns the adjusted fitness values for each Organism. These are the values we
+    /// This function returns the adjusted fitness values for each genome. These are the values we
     /// use to compare species.
     pub fn calculate_fitness(&self, ffunc: fn(&Genome) -> f64) -> Vec<f64> {
 

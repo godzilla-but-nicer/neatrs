@@ -17,3 +17,6 @@ Cargo.lock
 
 # vscode/workflow stuff
 .vscode/
+
+# data for example programs
+examples/data/*/*

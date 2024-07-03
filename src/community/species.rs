@@ -2,6 +2,7 @@ use crate::community::genome::Genome;
 use crate::community::recombination::{Alignment, AlignmentParams, CrossoverMode};
 use crate::neural_network::edge::Edge;
 use crate::community::mutation::{mutate};
+use crate::neural_network::NeuralNetwork;
 
 use rand::prelude::*;
 use crossbeam::thread;
@@ -192,7 +193,7 @@ impl Species {
     /// heaviest computation occurs in evaluating the fitness function. We will adjust these values
     /// before using them to make evolutionary comparisons. This function should probably be broken
     /// up. e.g. spawn_fitness_thread() or spawn chunk_threads()
-    fn calculate_raw_fitness(&self, ffunc: fn(&Genome) -> f64) -> Vec<f64> {
+    fn calculate_raw_fitness(&self, ffunc: fn(&NeuralNetwork) -> f64) -> Vec<f64> {
 
         // we're going to recieve indices and values from the child threads
         let mut i_fit_pairs = Vec::new();
@@ -214,7 +215,8 @@ impl Species {
 
                     // add handles for organism index and fitness from thread
                     handles.push(s.spawn(move |_| {
-                        let raw_fitness = ffunc(&self.population[org_j]);
+                        let nn = &self.population[org_j].to_neural_network();
+                        let raw_fitness = ffunc(nn);
                         (chunk_start + org_j, raw_fitness)
                     }));
                 }
@@ -240,7 +242,8 @@ impl Species {
             let mut handles: Vec<thread::ScopedJoinHandle<(usize, f64)>> = Vec::new();
             for org_j in 0..remainder {
                 handles.push(s.spawn(move |_| {
-                    let raw_fitness = ffunc(&self.population[org_j]);
+                    let nn = &self.population[org_j].to_neural_network();
+                    let raw_fitness = ffunc(nn);
                     (remain_start + org_j, raw_fitness)
                 }));
             }
@@ -267,7 +270,7 @@ impl Species {
 
     /// This function returns the adjusted fitness values for each genome. These are the values we
     /// use to compare species.
-    pub fn calculate_fitness(&self, ffunc: fn(&Genome) -> f64) -> Vec<f64> {
+    pub fn calculate_fitness(&self, ffunc: fn(&NeuralNetwork) -> f64) -> Vec<f64> {
 
         let raw_fitness = self.calculate_raw_fitness(ffunc);
         let mut adj_fitness = Vec::with_capacity(raw_fitness.len());
@@ -391,8 +394,8 @@ mod tests {
     #[test]
     fn test_calculate_raw_fitness() {
 
-        fn n_genes(gen: &Genome) -> f64 {
-            gen.edge_genes.len() as f64
+        fn n_genes(nn: &NeuralNetwork) -> f64 {
+            nn.edges.len() as f64
         }
         
         // genome size is easy test fitness func

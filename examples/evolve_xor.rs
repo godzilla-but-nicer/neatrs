@@ -19,7 +19,7 @@ fn main() {
         fitness: f64
     }
 
-    fn xor(genome: &Genome) -> XorReport {
+    fn xor(nn: &NeuralNetwork) -> XorReport {
         
         // many programs will have a time aspect
         let start_time = 0.0;
@@ -52,8 +52,7 @@ fn main() {
             target[i] = (sensor_1 ^ sensor_2) as u8 as f64;
         }
 
-        // construct neural networks and run for time duration
-        let mut nn = NeuralNetwork::from_genome(genome);
+        let mut nn = nn.clone();
 
         for t in 0..time.dim() {
             nn.propagate(vec![input_1[t], input_2[t]]);
@@ -73,7 +72,7 @@ fn main() {
         }
     }
 
-    fn xor_fitness(genome: &Genome) -> f64 {
+    fn xor_fitness(genome: &NeuralNetwork) -> f64 {
         let report = xor(genome);
 
         report.fitness
@@ -100,7 +99,7 @@ fn main() {
     neat.write_fitness_values("examples/data/evolve_xor/fitness_10.txt");
     let champion = neat.get_champion();
 
-    let report10 = xor(&champion);
+    let report10 = xor(&champion.to_neural_network());
 
     write_run_report("examples/data/evolve_xor/run_10.csv", report10);
     
@@ -108,7 +107,7 @@ fn main() {
     neat.write_fitness_values("examples/data/evolve_xor/fitness_20.txt");
     let champion = neat.get_champion();
 
-    let report20 = xor(&champion);
+    let report20 = xor(&champion.to_neural_network());
 
     write_run_report("examples/data/evolve_xor/run_20.csv", report20);
     
@@ -116,7 +115,7 @@ fn main() {
     neat.write_fitness_values("examples/data/evolve_xor/fitness_30.txt");
     let champion = neat.get_champion();
 
-    let report30 = xor(&champion);
+    let report30 = xor(&champion.to_neural_network());
 
     write_run_report("examples/data/evolve_xor/run_30.csv", report30);
 

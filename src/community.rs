@@ -7,6 +7,7 @@ mod mutation;
 use crate::community::genome::Genome;
 use crate::community::species::Species;
 use crate::community::recombination::{Alignment, AlignmentParams};
+use crate::neural_network::NeuralNetwork;
 
 use innovation_tracker::InnovationTracker;
 use serde::{Deserialize, Serialize};
@@ -127,7 +128,7 @@ impl Community {
 
     // calculates the species shared fitness to determine the sizes of the
     // populations of the species for the next generation
-    fn next_species_sizes(&self, ffunc: fn(&Genome) -> f64) -> Vec<usize> {
+    fn next_species_sizes(&self, ffunc: fn(&NeuralNetwork) -> f64) -> Vec<usize> {
         
         // numerator and needed for denominator 
         let mut sums: Vec<f64> = Vec::new();
@@ -155,7 +156,7 @@ impl Community {
 
 
     // for each species produce a new genome pool for the next generation of the community
-    fn reproduce_all(&self, ffunc: fn(&Genome) -> f64) -> CommunityReproduction {
+    fn reproduce_all(&self, ffunc: fn(&NeuralNetwork) -> f64) -> CommunityReproduction {
 
         let mut new_innovation_tracker = self.innovation_tracker.clone();
         let target_sizes = self.next_species_sizes(ffunc);
@@ -185,24 +186,24 @@ impl Community {
 
     }
 
-    pub fn generation(&mut self, fitness_function: fn(&Genome) -> f64) -> Community {
+    pub fn generation(&mut self, fitness_function: fn(&NeuralNetwork) -> f64) -> Community {
         self.species = self.identify_species();
         let community_updates = self.reproduce_all(fitness_function);
 
         Community::from_reproduction(community_updates, self.params.clone())
     }
 
-    pub fn get_all_fitness_values(&self, fitness_function: fn(&Genome) -> f64) -> Vec<f64> {
+    pub fn get_all_fitness_values(&self, fitness_function: fn(&NeuralNetwork) -> f64) -> Vec<f64> {
         
         let mut raw_fitness = Vec::with_capacity(self.genome_pool.len());
         for genome in &self.genome_pool {
-            raw_fitness.push(fitness_function(genome));
+            raw_fitness.push(fitness_function(&genome.to_neural_network()));
         }
 
         raw_fitness
     }
 
-    pub fn get_best_genome(&self, fitness_function: fn(&Genome) -> f64) -> Genome {
+    pub fn get_best_genome(&self, fitness_function: fn(&NeuralNetwork) -> f64) -> Genome {
 
         let fitness_values = self.get_all_fitness_values(fitness_function);
 
@@ -351,8 +352,8 @@ mod tests {
         println!{"{:?}", comm.species.len()};
 
         // define a simple fitness function
-        fn genome_len(genome: &Genome) -> f64 {
-            genome.edge_genes.len() as f64
+        fn genome_len(nn: &NeuralNetwork) -> f64 {
+            nn.edges.len() as f64
         }
 
         // get the sizes

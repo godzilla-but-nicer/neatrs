@@ -2,6 +2,7 @@ use rand::prelude::*;
 
 use crate::neural_network::edge::Edge;
 use crate::neural_network::node::*;
+use crate::neural_network::NeuralNetwork;
 
 use serde::{Serialize, Deserialize};
 
@@ -159,6 +160,11 @@ impl Genome {
             raw_fitness: 0.0,
         }
     }
+
+    pub fn to_neural_network(&self) -> NeuralNetwork {
+        NeuralNetwork::from_genome(self)
+    }
+    
 }
 
 #[cfg(test)]

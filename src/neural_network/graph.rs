@@ -46,6 +46,7 @@ impl error::Error for PathingError {}
 ///
 /// In the actual code, lifetime annotations ought to be sufficient to ensure valid
 /// references to sensors and outputs from the neural network information.
+#[derive(Clone)]
 pub struct Graph {
     pub edge_list: Vec<[usize; 2]>,
     pub preds: HashMap<usize, HashSet<usize>>,

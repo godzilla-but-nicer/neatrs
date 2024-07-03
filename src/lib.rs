@@ -14,6 +14,7 @@ use community::{Community, CommunityParams};
 use community::species::SpeciesParams;  // param structs should be moved up to community for public
 use community::recombination::CrossoverMode;
 
+use neural_network::NeuralNetwork;
 use serde::{Serialize, Deserialize};
 use rstest::{rstest, fixture};
 
@@ -32,7 +33,7 @@ pub struct NEATParams {
 
 pub struct NEAT {
     community: Community,
-    fitness_function: fn(&Genome) -> f64,
+    fitness_function: fn(&NeuralNetwork) -> f64,
     params: NEATParams,
 }
 
@@ -49,7 +50,7 @@ impl NEAT {
     }
 
 
-    pub fn from_parameters(parameter_path: &str, fitness: fn(&Genome) -> f64) -> NEAT {
+    pub fn from_parameters(parameter_path: &str, fitness: fn(&NeuralNetwork) -> f64) -> NEAT {
 
         let neat_parameters = Self::read_parameter_file(parameter_path);
         

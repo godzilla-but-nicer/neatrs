@@ -20,9 +20,10 @@ use std::collections::HashMap;
 /// The main interactions users will have with these objects then is in their creation with the
 /// constructor `NeuralNetwork::from_genome()`and conversion of sensor readings into control 
 /// outputs with the method `nn.propogate()`.
+#[derive(Clone)]
 pub struct NeuralNetwork {
     nodes: Vec<Node>,
-    edges: Vec<Edge>,
+    pub edges: Vec<Edge>,
     sensor_idx: Vec<usize>,
     output_idx: Vec<usize>,
     activation_order: Vec<usize>,

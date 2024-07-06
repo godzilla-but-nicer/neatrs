@@ -8,6 +8,7 @@ use rand::prelude::*;
 use crossbeam::thread;
 
 use serde::{Serialize, Deserialize};
+use rstest::{rstest, fixture};
 
 use super::innovation_tracker::{self, InnovationTracker};
 use super::mutation::MutationInfo;
@@ -308,7 +309,7 @@ mod tests {
 
     use super::*;
 
-    #[test]
+    #[rstest]
     fn test_sorted_pop_fitness() {
         // built a species with some organisms
         let mut spe = Species::new(0);
@@ -326,7 +327,7 @@ mod tests {
         assert_eq!(vec![1, 2, 0], sorted_idx);
     }
 
-    #[test]
+    #[rstest]
     fn test_get_reproducers() {
         // built a species with some organisms
         let mut spe = Species::new(0);
@@ -346,7 +347,7 @@ mod tests {
     }
 
     // this test is a bit weak. should compare different length genomes
-    #[test]
+    #[rstest]
     fn test_alternating() {
 
         // We'll start by making dense genomes and then replace the edges
@@ -391,7 +392,7 @@ mod tests {
 
     }
 
-    #[test]
+    #[rstest]
     fn test_calculate_raw_fitness() {
 
         fn n_genes(nn: &NeuralNetwork) -> f64 {
@@ -414,5 +415,32 @@ mod tests {
         assert!((fitness_vals[1] - 3.0).abs() < 1e5);
         assert!((fitness_vals[2] - 6.0).abs() < 1e5)
     }
+
+    #[rstest]
+    fn test_reproduce() {
+
+        let test_tracker = InnovationTracker {
+            node_max_innov: 2,
+            edge_max_innov: 1,
+        };
+
+        fn n_genes(nn: &NeuralNetwork) -> f64 {
+            nn.edges.len() as f64
+        }
+        
+        // genome size is easy test fitness func
+        let gen_1 = Genome::new_dense(2, 1);
+        let gen_2 = Genome::new_dense(2, 1);
+        let gen_3 = Genome::new_dense(2, 1);
+        
+        let mut test_species = Species::new(0);
+        test_species.add_from_genome(gen_1);
+        test_species.add_from_genome(gen_2);
+        test_species.add_from_genome(gen_3);
+
+        let reproduction = test_species.reproduce(4, test_tracker);
+        assert_eq!(reproduction.population.len(), 4);
+    }
+
 
 }

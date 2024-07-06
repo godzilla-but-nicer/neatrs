@@ -53,11 +53,13 @@ fn main() {
         }
 
         let mut nn = nn.clone();
-
+        println!("{:?}", nn.node_map);
+        println!("{:?}", nn.activation_order);
         for t in 0..time.dim() {
             nn.propagate(vec![input_1[t], input_2[t]]);
             output[t] = nn.get_output()[0];
         }
+        println!("Simulated_run complete");
 
         let absolute_diff = (&output - &target).mapv(f64::abs);
         let fitness = absolute_diff.mapv(|x| (-1. * x).exp()).sum();

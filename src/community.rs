@@ -316,7 +316,7 @@ mod tests {
         assert!(comm.species.len() == 2) 
     }
 
-    #[test]
+    #[rstest]
     fn test_next_species_sizes() {
         // make a sparse genome
         let mut gen_1 = Genome::new_dense(2, 3);
@@ -364,7 +364,7 @@ mod tests {
         assert_eq!(sizes[1], 3)
     }
 
-    #[test]
+    #[rstest]
     fn test_reproduce_all_count() {
 
     }

@@ -26,9 +26,9 @@ pub struct NeuralNetwork {
     pub edges: Vec<Edge>,
     sensor_idx: Vec<usize>,
     output_idx: Vec<usize>,
-    activation_order: Vec<usize>,
+    pub activation_order: Vec<usize>,
     topology: Graph,
-    node_map: HashMap<usize, usize>,  // this map innovation numbers to indices
+    pub node_map: HashMap<usize, usize>,  // this map innovation numbers to indices
 }
 
 impl NeuralNetwork {

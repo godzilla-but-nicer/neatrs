@@ -524,6 +524,16 @@ mod tests {
     }
 
     #[fixture]
+    fn simplest_graph() -> Graph {
+        Graph::from_edge_list(vec![[0, 2], [1, 2]], vec![0, 1], vec![2])
+    }
+
+    #[fixture]
+    fn output_recurrance_graph() -> Graph {
+        Graph::from_edge_list(vec![[0, 2], [1, 2], [2, 1]], vec![0, 1], vec![2])
+    }
+
+    #[fixture]
     fn singly_recurrent_layer_map_known() -> Vec<HashMap<usize, usize>> {
         let mut known1: HashMap<usize, usize> = HashMap::new();
         known1.insert(0, 0);
@@ -645,6 +655,8 @@ mod tests {
                                           Ok(vec![0, 1, 3, 4, 2, 5]),
                                           Ok(vec![1, 0, 3, 4, 2, 5])])]
     #[case(two_cycle_graph(), vec![Ok(vec![0, 1, 2, 3, 4]), Ok(vec![1, 0, 2, 3, 4])])]
+    #[case(simplest_graph(), vec![Ok(vec![0, 1, 2]), Ok(vec![1, 0, 2])])]
+    #[case(output_recurrance_graph(), vec![Ok(vec![0, 1, 2]), Ok(vec![1, 0, 2])])]
     fn test_recurrent_pseudosort(
         #[case] graph: Graph,
         #[case] knowns: Vec<Result<Vec<usize>, ConnectivityError>>,
